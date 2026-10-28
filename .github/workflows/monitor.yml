@@ -1,0 +1,22 @@
+name: Monitor Leque extensions
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this repository
+        run: |
+          git clone --quiet --depth=1 --branch main "https://github.com/$GITHUB_REPOSITORY.git" project
+      - name: Check extension file hashes and availability
+        run: |
+          cd project
+          python3 scripts/validate_repo.py
+          python3 scripts/check_links.py

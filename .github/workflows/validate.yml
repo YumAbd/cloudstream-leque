@@ -1,0 +1,25 @@
+name: Validate Leque repository
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this repository
+        run: |
+          git clone --quiet "https://github.com/$GITHUB_REPOSITORY.git" project
+          cd project
+          git fetch --quiet --depth=1 origin "$GITHUB_REF"
+          git checkout --quiet --detach FETCH_HEAD
+      - name: Validate CloudStream Leque metadata
+        run: |
+          cd project
+          python3 scripts/validate_repo.py

@@ -1,48 +1,55 @@
-# CloudStream Android integration: clean, reproducible fork
+# Integrasi CloudStream Leque V5 — Android
 
-The official CloudStream source is licensed GPL-3.0. Keep upstream copyright notices, publish your modified source as required when distributing GPL-covered binaries, and respect third-party extension authors' independent licenses.
+Dokumen ini menerangkan konfigurasi aplikasi Leque selepas repository ekstensi sendiri disahkan. Repository ini mengandungi metadata ekstensi dan skrip, **bukan** kod sumber aplikasi Android atau APK siap pasang.
 
-## IMPORTANT: Existing cloned APK
+## Sasaran aplikasi
 
-`CloudStreamMODV5.apk` is a third-party cloned binary (`com.bayustecu.stecustream`) and ships with App Cloner-specific assets, including an `assets/.appDataFile`. This starter does NOT modify or re-sign that APK. Do not claim a matching signing certificate unless you possess the real signing key. A new fork signed with your own key cannot be installed as a normal update over a differently signed application of the same package name.
+- Nama launcher: `CloudStream Leque V5`
+- Nama profil lalai pemasangan bersih: `Mod v5 by Leque`
+- Android application ID: `com.leque.cloudstreamv5`
+- Repository pradaftar: `https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/repo.json`
+- Tiada popup promosi yang ditambah oleh pihak Leque
+- Tiada pemasangan automatik ekstensi yang tidak disemak
 
-## Fresh-source build
+## Binaan daripada kod sumber
 
-1. Install Android Studio / Android SDK (compileSdk 37 for the official source snapshot checked 2026-10-28), a suitable Gradle/JDK toolchain (the official project targets Java 17 toolchain). The project's own Gradle wrapper determines the Gradle version.
-2. Obtain the official Git repository: `git clone https://github.com/recloudstream/cloudstream.git`.
-3. First create and publish your GitHub repository `cloudstream-leque` using these starter files. Its `main/repo.json` URL must be publicly accessible over HTTPS.
-4. From this starter's folder, patch the CloudStream checkout:
+1. Dapatkan kod sumber rasmi CloudStream dalam folder pembangunan Android **berasingan**, bukan menyalinnya ke repository katalog ini.
+2. Pasang Android Studio, Android SDK dan JDK/Gradle yang ditentukan oleh projek sumber.
+3. Sahkan terlebih dahulu manifest Leque dan skrip validasi repository.
+4. Dari folder repository ini, jalankan skrip patch terhadap checkout kod sumber yang bersih:
 
-   `python scripts/patch_cloudstream_source.py --source "C:/Projects/cloudstream" --github-user YumAbd`
+```bash
+python scripts/patch_cloudstream_source.py --source "C:/Projects/cloudstream" --github-user YumAbd
+```
 
-5. Inspect changes: specifically `RepositoryManager.kt`, `donottranslate-strings.xml`, `app/build.gradle.kts` and `AndroidManifest.xml`. Do not silently reapply if newer upstream source has changed those locations.
-6. Build debug variant via Android Studio or `./gradlew :app:assembleDebug` (on Windows `gradlew.bat :app:assembleDebug`). Confirm the app launches on a clean Android device/emulator.
-7. Test the launcher displays `CloudStream Leque V5`; Settings -> profile shows `Mod v5 by Leque`; Settings -> Extensions shows your own repository; no legacy Bayu/Phisher repo is present by default. Extensions are NOT silently pre-installed.
-8. Build a release APK with a persistent, private Android signing key that you control; keep keystore and password securely backed up. App updates require the same app ID and signing key across releases.
+5. Semak perubahan pada `RepositoryManager.kt`, `donottranslate-strings.xml`, `app/build.gradle.kts` dan `AndroidManifest.xml`. Skrip patch ini hanya membuat perubahan awal; ia bukan proses binaan lengkap dan mungkin perlu disesuaikan jika struktur kod sumber berubah.
+6. Bina APK debug menggunakan Android Studio atau Gradle wrapper dan uji di Android sebenar.
+7. Sahkan profil baharu, nama aplikasi, application ID, akses repository sendiri dan tiada popup daripada kod aplikasi.
+8. Gunakan keystore persendirian yang konsisten untuk menandatangani release APK; simpan backup keystore di luar GitHub.
 
-## Important: official APK update feed is NOT your Leque APK feed
+## Kemas kini APK dan ekstensi ialah dua perkara berasingan
 
-The official CloudStream application has app-updater paths pointing to `recloudstream/cloudstream` GitHub releases (for example `GithubReleases.kt` and `InAppUpdater.kt`). Before publishing the Leque APK, disable that upstream APK-update path or replace it with an update feed that serves ONLY APKs signed using your own Leque signing key. This is **different from extension auto-updates**: keep extension auto-update enabled, but do not attempt to install official CloudStream APK releases over a Leque package. Test both the "updates available" UI and manual update actions before distribution.
+**APK:** Saluran kemas kini aplikasi perlu menggunakan release Leque sendiri, atau dilumpuhkan sementara sehingga saluran tersebut tersedia. Jangan gunakan feed yang memasang aplikasi dengan package ID atau signing certificate berbeza.
 
-## How auto-updates work
+**Ekstensi:** `sumber.json` digunakan untuk menyemak versi fail `.cs3` yang telah dipasang. Bila `internalName` kekal, `version` meningkat, dan muat turun lulus integriti, CloudStream boleh mengemas kini ekstensi tersebut semasa menyemak kemas kini. Fail baharu yang cuma disenaraikan tidak dipasang secara automatik.
 
-The official `PluginManager` checks installed plugin `internalName`, matches by the **same repository listing URL**, and upgrades when `version` is greater than the installed version. Changing a plugin URL without increasing `version` will not trigger the normal update. Changing the root repository URL after distribution also does not migrate users automatically.
+**Sumber tontonan:** Jika sesuatu laman atau API dalam ekstensi berhenti berfungsi, kod ekstensi perlu dikemas kini dan diuji; perubahan `repo.json` sahaja tidak menyelesaikan masalah.
 
-- Keep the fixed URL `https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/repo.json` stable.
-- In your own `sumber.json`, retain `internalName` and increment `version` when publishing a changed `.cs3`.
-- `fileHash` must match the actual bytes if given; changing it without updating the binary will cause a verification failure.
-- Auto-update usually runs as the app starts with network access and the setting enabled; it is not an immediate remote push and not guaranteed while the app is closed.
-- New extensions are not automatically installed just because they are listed in the repo.
-- A broken upstream streaming site requires provider code changes or a working replacement; editing JSON alone cannot fix it.
+## Pemeriksaan sebelum pengedaran
 
-## Popup
+- Uji pemasangan bersih dan permulaan pertama.
+- Uji nama profil `Mod v5 by Leque` serta kebolehan pengguna mengedit profil kemudian.
+- Uji repository dan satu fail ekstensi yang benar-benar boleh dimuat.
+- Uji keadaan offline, pautan rosak, hash salah dan percubaan rollback versi.
+- Uji fungsi auto-update ekstensi tanpa memaksa pemasangan ekstensi baharu.
+- Pastikan popup promosi tidak dibawa masuk oleh kod atau ekstensi pilihan.
+- Sahkan signature, versionCode, application ID, dan proses kemas kini APK.
+- Simpan nota perubahan, versi dan bukti ujian.
 
-The repository JSON itself does not contain the startup donation popup. The legacy APK includes App Cloner app-data and several plugins from Phisher98; without original source/data decoding, the exact startup popup injection path cannot be certified. A clean official-source build that does not include a donation overlay is a safer starting point than patching an untrusted, third-party cloned APK. Test any Phisher-owned plugin separately before distribution; an extension may itself display messages.
+## Lesen dan hak penggunaan
 
-## Distributing responsibly
+Kod sumber aplikasi CloudStream menggunakan lesen GPL-3.0. Sebarang pengedaran APK terbitan mesti mengekalkan notis hak cipta, kredit dan syarat lesen termasuk penyediaan kod sumber ubah suai yang berkenaan. Lesen dan atribusi bagi ekstensi juga perlu dihormati. Menghapuskan nama atau pautan import katalog daripada repository Leque **tidak** memberi hak untuk menghilangkan kredit wajib pada kod yang benar-benar digunakan.
 
-Use only authorized or properly licensed extension sources and streaming material. Keep authors' attribution, comply with CloudStream GPL-3.0, avoid blindly mirroring unknown `.cs3` files. Supply your modified app source and license notices as required by applicable licenses.
+## Playlist IPTV
 
-## IPTV playlist file
-
-The original Bayu repository also contains a small `cloudstream.m3u8`, but CloudStream does not automatically load it merely because it resides beside `repo.json`. This template ships an empty M3U header only. Populate it only with sources you have permission to share, and configure the appropriate IPTV extension to read its stable raw GitHub URL.
+`cloudstream.m3u8` bermula sebagai header kosong `#EXTM3U`. Ia tidak dipasang atau dibaca automatik oleh CloudStream; jika hendak digunakan, anda memerlukan ekstensi berkenaan dan kandungan yang dibenarkan.

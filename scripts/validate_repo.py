@@ -1,78 +1,79 @@
 #!/usr/bin/env python3
-"""Validate local CloudStream repository catalog before publishing."""
+"""Validate Leque's manifest and self-hosted extension catalog."""
 import json
 from pathlib import Path
 import re
 import sys
-from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIRED = {'url', 'status', 'version', 'name', 'internalName', 'authors', 'apiVersion'}
-
-
-def https_url(value):
-    try:
-        p = urlparse(value)
-        return p.scheme == 'https' and bool(p.hostname) and not p.username and not p.password
-    except (TypeError, ValueError):
-        return False
+RAW = 'https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/'
+OWN_REPO = 'https://github.com/YumAbd/cloudstream-leque'
+REQUIRED = {'url', 'status', 'version', 'name', 'internalName', 'authors', 'apiVersion', 'fileSize', 'fileHash'}
 
 
 def main():
-    errs = []
+    errors = []
     try:
-        manifest = json.loads((ROOT/'repo.json').read_text(encoding='utf-8'))
-        catalog = json.loads((ROOT/'sumber.json').read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError) as e:
-        print(f'ERROR JSON: {e}', file=sys.stderr)
+        manifest = json.loads((ROOT / 'repo.json').read_text(encoding='utf-8'))
+        catalog = json.loads((ROOT / 'sumber.json').read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        print('ERROR: invalid or missing JSON:', exc, file=sys.stderr)
         return 1
-    if not isinstance(manifest, dict) or manifest.get('manifestVersion') != 1:
-        errs.append('repo.json: invalid manifestVersion')
-    elif not isinstance(manifest.get('pluginLists'), list) or not manifest['pluginLists']:
-        errs.append('repo.json: pluginLists must be non-empty array')
-    elif not all(https_url(x) for x in manifest['pluginLists']):
-        errs.append('repo.json: pluginLists must contain valid HTTPS URLs')
+
+    if not isinstance(manifest, dict):
+        errors.append('repo.json must be a JSON object')
+    else:
+        if manifest.get('manifestVersion') != 1:
+            errors.append('repo.json: manifestVersion must be 1')
+        if manifest.get('pluginLists') != [RAW + 'sumber.json']:
+            errors.append('repo.json: pluginLists must point only to Leque sumber.json')
+
     if not isinstance(catalog, list):
-        errs.append('sumber.json: must be an array')
+        errors.append('sumber.json must be a JSON array')
         catalog = []
     seen = set()
-    for index, plugin in enumerate(catalog):
+    for index, entry in enumerate(catalog):
         tag = f'sumber.json[{index}]'
-        if not isinstance(plugin, dict):
-            errs.append(f'{tag}: plugin metadata must be an object')
+        if not isinstance(entry, dict):
+            errors.append(tag + ' must be an object')
             continue
-        missing = REQUIRED - plugin.keys()
+        missing = REQUIRED - entry.keys()
         if missing:
-            errs.append(f'{tag}: missing keys {sorted(missing)}')
-        name = plugin.get('internalName')
-        if not isinstance(name, str) or not name:
-            errs.append(f'{tag}: invalid internalName')
-        elif name in seen:
-            errs.append(f'{tag}: duplicate internalName {name}')
-        else:
-            seen.add(name)
-        if not https_url(plugin.get('url')):
-            errs.append(f'{tag}: URL must be HTTPS')
-        if type(plugin.get('status')) is not int or plugin['status'] not in range(4):
-            errs.append(f'{tag}: invalid status (0-3)')
-        if type(plugin.get('version')) is not int or plugin['version'] < 1:
-            errs.append(f'{tag}: version must be integer >= 1')
-        if type(plugin.get('apiVersion')) is not int or plugin['apiVersion'] != 1:
-            errs.append(f'{tag}: apiVersion must equal 1')
-        if not isinstance(plugin.get('authors'), list) or not all(isinstance(x, str) for x in plugin['authors']):
-            errs.append(f'{tag}: authors must be array of strings')
-        digest = plugin.get('fileHash')
-        if digest is not None and not re.fullmatch(r'sha256-[a-fA-F0-9]{64}', digest):
-            errs.append(f'{tag}: invalid sha256 fileHash')
-        if plugin.get('fileSize') is not None and (type(plugin['fileSize']) is not int or plugin['fileSize'] <= 0):
-            errs.append(f'{tag}: invalid fileSize')
-    for error in errs:
+            errors.append(f'{tag}: missing fields {sorted(missing)}')
+        name = entry.get('internalName')
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_.-]{0,99}', name):
+            errors.append(tag + ': invalid internalName')
+            continue
+        if name in seen:
+            errors.append(tag + ': duplicate internalName')
+        seen.add(name)
+        if entry.get('url') != RAW + 'extensions/' + name + '.cs3':
+            errors.append(tag + ': extension file must be hosted at Leque extensions/')
+        if entry.get('repositoryUrl') not in (None, OWN_REPO):
+            errors.append(tag + ': repositoryUrl must be Leque-owned')
+        if type(entry.get('status')) is not int or entry.get('status') not in (0, 1, 2, 3):
+            errors.append(tag + ': status must be 0..3')
+        if type(entry.get('version')) is not int or entry.get('version') < 1:
+            errors.append(tag + ': version must be integer >= 1')
+        if type(entry.get('apiVersion')) is not int or entry.get('apiVersion') != 1:
+            errors.append(tag + ': apiVersion must equal 1')
+        if not isinstance(entry.get('name'), str) or not entry['name'].strip():
+            errors.append(tag + ': name must be non-empty')
+        if not isinstance(entry.get('authors'), list) or not entry['authors'] or not all(isinstance(a, str) and a.strip() for a in entry['authors']):
+            errors.append(tag + ': authors must be non-empty array')
+        if type(entry.get('fileSize')) is not int or entry.get('fileSize') <= 0:
+            errors.append(tag + ': fileSize must be positive integer')
+        if not isinstance(entry.get('fileHash'), str) or not re.fullmatch(r'sha256-[a-f0-9]{64}', entry['fileHash']):
+            errors.append(tag + ': fileHash must be SHA-256')
+
+    for error in errors:
         print('ERROR:', error, file=sys.stderr)
-    if errs:
-        print(f'FAIL: {len(errs)} issue(s)', file=sys.stderr)
+    if errors:
+        print(f'FAIL: {len(errors)} issue(s)', file=sys.stderr)
         return 1
     print(f'PASS: repository format valid; {len(catalog)} extensions indexed')
     return 0
+
 
 if __name__ == '__main__':
     sys.exit(main())

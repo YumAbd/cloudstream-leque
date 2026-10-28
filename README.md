@@ -1,107 +1,78 @@
-**Repo GitHub:** https://github.com/YumAbd/cloudstream-leque  
-**Install URL:** https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/repo.json  
-**Panduan langkah pertama:** [SETUP_GITHUB_YUMABD.md](SETUP_GITHUB_YUMABD.md)
+# CloudStream Leque V5 — Repository
 
-# CloudStream Mod V5 by Leque - repository
+Repository rasmi projek Leque: https://github.com/YumAbd/cloudstream-leque
 
-Status: **project template**, not a ready-to-install APK. GitHub publication and Android build must be done by the repository owner.
+**Alamat pemasangan:** https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/repo.json
 
-## Goal
+Repository ini dikendalikan secara bebas oleh Leque. Tiada import automatik atau sambungan kepada katalog repository lain. Kod aplikasi Android dan APK akan diuruskan secara berasingan.
 
-- Own the **stable** repository manifest (`repo.json`) and plugin catalog (`sumber.json`).
-- Optional `cloudstream.m3u8` placeholder is independent of CloudStream extension metadata; connect it from an IPTV extension explicitly if used. Do not assume publishing it loads channels automatically.
-- Build a clean CloudStream fork with default local profile `Mod v5 by Leque`.
-- Pre-register the Leque repository at first launch.
-- Publish versioned plugin fixes to GitHub without forcing every user to reinstall the Android app.
+## Komponen
 
-## 1. Create YOUR GitHub repo
+- `repo.json` — manifest CloudStream yang menunjuk hanya kepada katalog Leque.
+- `sumber.json` — indeks ekstensi. Bermula dengan `[]`, iaitu tiada ekstensi.
+- `extensions/` — fail `.cs3` yang dibina/diedarkan dengan kebenaran sah; folder akan wujud selepas penambahan pertama.
+- `cloudstream.m3u8` — fail playlist kosong pilihan; tidak dimuat secara automatik oleh CloudStream.
+- `scripts/add_plugin.py` — daftar fail ekstensi baharu yang akan dihos oleh repository Leque.
+- `scripts/replace_plugin.py` — kemas kini fail ekstensi sedia ada dan naikkan versinya.
+- `scripts/validate_repo.py` — semak format, identiti repository dan URL muat turun.
+- `scripts/check_links.py` — uji URL muat turun dan hash fail yang diterbitkan.
+- `.github/workflows/` — validasi semasa push dan pemantauan fail secara berkala.
 
-1. Public repository `YumAbd/cloudstream-leque` sudah dicipta di GitHub.
-2. Extract pakej dan upload/commit **semua kandungan folder utama** ke branch `main`, termasuk `.github/workflows/` dan `scripts/` (jangan upload fail ZIP itu sendiri, secret atau Android keystore).
-3. Manifest telah ditetapkan kepada akaun `YumAbd` — tidak perlu jalankan `configure.py` lagi.
-4. Verify in your browser:
+## Status semasa
 
-   `https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/repo.json`
+Manifest dan katalog telah disediakan. `sumber.json` masih kosong. Ini normal dan tidak bermaksud ekstensi telah dipasang secara automatik. **Jangan mengisi katalog dengan fail yang hak pengedaran atau keselamatannya belum disahkan.**
 
-   and
+## Cara menambah ekstensi sendiri
 
-   `https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/sumber.json`
+Pastikan fail `.cs3` adalah build yang sah, dibenarkan untuk diedarkan, dan sepadan dengan `internalName` ekstensi.
 
-5. Until you import metadata or add your own properly licensed extensions, `sumber.json` contains `[]` and the catalog is empty. That is intentional and safe.
+```bash
+python scripts/add_plugin.py --file "./build/Example.cs3" --internal-name Example --name Example --author "Pemilik Sebenar" --version 1 --language ms
+python scripts/validate_repo.py
+git add sumber.json extensions/
+git commit -m "Add reviewed extension"
+git push
+```
 
-## 2. OPTIONAL: import upstream metadata once
+Skrip akan menyalin fail ke `extensions/Example.cs3`, mengira SHA-256, dan menambah metadata di `sumber.json`. Semua URL fail yang diterbitkan menunjuk kepada repository Leque sendiri.
 
-Original third-party index is `gvisionXcloudstream/bayustecu`, published without a detected `LICENSE` file (checked 2026-10-28). A public GitHub repository does **not** imply a broad license to redistribute its content. Confirm rights/permission and suitability of individual plugins before public distribution.
+## Cara mengemas kini ekstensi yang sudah dipasang
 
-   `python scripts/import_bayu_index.py`
+```bash
+python scripts/replace_plugin.py --file "./build/Example.cs3" --internal-name Example --version 2
+python scripts/validate_repo.py
+git add sumber.json extensions/
+git commit -m "Update reviewed extension"
+git push
+```
 
-This copies **metadata only** from the upstream URL to the local catalog. It does not copy the `.cs3` binaries. Items marked NSFW are omitted by default. You may add `--exclude-phisher` if you prefer not to include Phisher-hosted plugins (including MovieBox, which may be important to your usage). Whether those plugins cause the donation popup must still be tested. See `--help` for filters. The downloaded third-party URLs may later stop working; the import is not a permanent mirror.
+Kekalkan `internalName` dan **naikkan `version`** setiap kali kod berubah. Aplikasi yang telah memasang ekstensi itu boleh menyemak versi baharu apabila online dan auto-update ekstensi aktif. Kemas kini tidak semestinya berlaku serta-merta; ekstensi baharu juga tidak dipasang secara automatik hanya kerana ia disenaraikan.
 
-   `python scripts/validate_repo.py`
+## Validasi dan pemantauan
 
-Review `sumber.json`, remove unwanted or unlicensed providers, then commit it to GitHub.
+```bash
+python scripts/validate_repo.py
+python scripts/check_links.py
+```
 
-Do **not** set GitHub Actions to blindly copy new upstream plugins or bypass hash checks. Treat updates as new code that needs review.
+Semak tab [Actions](https://github.com/YumAbd/cloudstream-leque/actions). Workflow validasi berjalan pada perubahan repository; pemantauan pautan berjalan secara berjadual atau manual. Jika sesuatu fail rosak, workflow memberi amaran dan **tidak** menggantikan atau menjalankan kod secara automatik.
 
-## 3. Replace a broken plugin
+## Membina APK Leque
 
-A plugin initially appears like:
+Lihat [panduan integrasi Android](docs/APK_INTEGRATION.md). Sasaran:
 
-   `{"internalName":"Example","name":"Example","version":4,"url":"https://.../Example.cs3", ...}`
+- Nama aplikasi: **CloudStream Leque V5**
+- Nama profil lalai: **Mod v5 by Leque**
+- Repository siap tambah: **YumAbd/cloudstream-leque**
+- Application ID berasingan: `com.leque.cloudstreamv5`
+- Tandatangan APK menggunakan kunci milik Leque, bukan kunci aplikasi lain
 
-The update must retain `internalName` and increment `version` to 5 or higher.
+Kod aplikasi asal CloudStream tertakluk kepada lesen GPL-3.0. Jika membina dan mengedarkan aplikasi terbitan, kekalkan notis hak cipta, kredit dan kewajipan lesen yang berkaitan. Repository ini tidak mengandungi kod aplikasi rasmi tersebut.
 
-### Option A: have a trusted new file `Example.cs3`
+## Had pembaikan melalui GitHub
 
-   `python scripts/replace_plugin.py --internal-name Example --version 5 --file ./Example.cs3 --github-user YumAbd`
-
-This copies it into `extensions/Example.cs3`, computes `fileHash` SHA256 and size, updates `sumber.json` to your own raw GitHub URL. Commit `extensions/` and `sumber.json` together.
-
-### Option B: point to a trusted HTTPS build hosted elsewhere
-
-   `python scripts/replace_plugin.py --internal-name Example --version 5 --url https://trusted.example.org/Example.cs3`
-
-The script downloads and calculates SHA256, records its real size, and edits `sumber.json`. The external URL still remains a dependency; hosting an authorized, audited copy in your repository is more durable.
-
-### Required rollout procedure
-
-- Review the source and permission to distribute the replacement plugin.
-- Publish/test the binary at the URL in `sumber.json` before end users receive the updated catalog.
-- Check that the downloaded file matches `fileHash`.
-- Commit/push to GitHub `main`, wait for the GitHub Pages/raw cache to refresh, then relaunch CloudStream with internet and auto-updates enabled.
-- Do not assume all installed users update at once: it happens at a suitable app refresh/start and may fail due to network, broken binaries, disabled updates, etc.
-
-## 4. Monitor without silently installing unknown binaries
-
-- `.github/workflows/validate.yml`: validates JSON on every push/PR.
-- `.github/workflows/monitor.yml`: daily read-only check of plugin downloads and SHA256. A failed workflow indicates a broken link/integrity mismatch; it does **not** auto-replace code.
-
-In local terminal:
-
-   `python scripts/validate_repo.py`
-   `python scripts/check_links.py`
-
-## 5. Build branded APK
-
-See [docs/APK_INTEGRATION.md](docs/APK_INTEGRATION.md).
-
-   `git clone https://github.com/recloudstream/cloudstream.git`
-
-After GitHub repo is public:
-
-   `python scripts/patch_cloudstream_source.py --source C:/Projects/cloudstream --github-user YumAbd`
-
-The patch makes four targeted changes to official CloudStream source: add your fixed prebuilt repo, replace default profile resource, set independent Android application ID and rebrand the launcher label. It does **not** magically patch the old App Cloner package. Build and sign with Android Studio; run clean-install and upgrade tests. Before publishing, disable or redirect CloudStream official app-update feed to releases signed by Leque (see docs/APK_INTEGRATION.md).
-
-## Distinguish issues
-
-| Problem | GitHub JSON change enough? |
-| --- | --- |
-| Bayu Stecu deletes its index | Yes, once own `repo.json` and `sumber.json` are independent. |
-| Link to `.cs3` is dead | Only if you have a working authorized replacement `.cs3` and bump `version`. |
-| Provider's target website changes | No; fix provider code and build/version a replacement. |
-| Your own repository base URL changes or dies | No; previously installed APKs cannot discover a new root URL unless fallback/update logic was built in. |
-| New extension appears in catalog | Users must usually install it manually; auto-update covers installed extensions. |
-| Donations popup from third-party plugin | Identify and omit/rework the specific extension with its author's permission; repository JSON alone won't remove injected plugin UI. |
-
-**Version and security:** keep ownership of signing keystore and repo; review PRs; pin/trust download sources; never publish a blanket auto-execute arbitrary `.cs3` pipeline.
+- URL atau manifest katalog rosak: boleh dibaiki di repository Leque jika URL induk kekal hidup.
+- Fail `.cs3` rosak: perlu sediakan build baharu yang diuji, kemudian tingkatkan `version`.
+- Laman yang diakses oleh ekstensi berubah: kod ekstensi mesti dibaiki; edit JSON sahaja tidak mencukupi.
+- Aplikasi Android sendiri berubah: perlu bina dan tandatangani APK baharu.
+- Jangan simpan keystore, token rahsia, kata laluan atau data peribadi dalam repository Public.
