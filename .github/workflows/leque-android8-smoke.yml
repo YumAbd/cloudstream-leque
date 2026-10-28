@@ -1,0 +1,77 @@
+name: Verify Android 8.0 compatibility - Leque 5.0.1
+on:
+  push:
+    branches: [apk-build]
+    paths: ['.github/workflows/leque-android8-smoke.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  android8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Download the existing successful Leque 5.0.1 APK
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: CloudStream-by-Leque-v5.0.1-Debug
+          path: smoke
+          repository: YumAbd/cloudstream-leque
+          run-id: 40682453510
+          github-token: \${{ github.token }}
+      - name: Confirm APK allows API 26 installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=smoke/CloudStream-by-Leque-v5.0.1-Debug.apk
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" > smoke/android-manifest-badging.txt
+          grep -E "^(package:|sdkVersion:|targetSdkVersion:)" smoke/android-manifest-badging.txt
+          MIN_SDK="$(sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p" smoke/android-manifest-badging.txt)"
+          test -n "$MIN_SDK"
+          test "$MIN_SDK" -le 26
+          grep "package: name='com.leque.cloudstreamv5.debug'" smoke/android-manifest-badging.txt
+      - name: Enable KVM hardware acceleration
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch app on Android 8.0 emulator (API 26)
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 26
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
+            adb logcat -c || true
+            adb install -r smoke/CloudStream-by-Leque-v5.0.1-Debug.apk
+            adb shell am start -W -n com.leque.cloudstreamv5.debug/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
+            sleep 22
+            adb shell pidof com.leque.cloudstreamv5.debug > smoke/process-id.txt
+            adb logcat -d -b crash > smoke/android8-crash-buffer.txt || true
+            if grep -E 'FATAL EXCEPTION|Process: com.leque.cloudstreamv5.debug' smoke/android8-crash-buffer.txt; then
+              echo "FAIL: Android 8 emulator crash detected"
+              exit 1
+            fi
+            adb shell dumpsys activity activities > smoke/activity-dump.txt
+            adb shell screencap -p /sdcard/leque-android8.png || true
+            adb pull /sdcard/leque-android8.png smoke/leque-android8.png || true
+            echo "PASS: APK installed and process stayed alive on Android 8.0 (API 26)"
+      - name: Upload Android 8 smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: CloudStream-by-Leque-Android8-Smoke-Evidence
+          path: smoke/
+          retention-days: 14
