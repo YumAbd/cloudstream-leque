@@ -1,4 +1,4 @@
-name: Build CloudStream Leque V5 Debug APK
+name: Build CloudStream by Leque Debug APK
 on:
   push:
     branches: [apk-build]
@@ -41,6 +41,7 @@ jobs:
       - name: Apply Leque customization
         run: |
           python3 leque/customize.py upstream
+          python3 leque/customize_v51.py upstream
           git -C upstream diff --check
       - name: Compile Android debug APK
         working-directory: upstream
@@ -50,16 +51,16 @@ jobs:
       - name: Collect APK and patch
         run: |
           mkdir -p out
-          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudStream-Leque-V5-Debug.apk \;
-          test -s out/CloudStream-Leque-V5-Debug.apk
+          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudStream-by-Leque-v5.0.1-Debug.apk \;
+          test -s out/CloudStream-by-Leque-v5.0.1-Debug.apk
           git -C upstream diff --binary > out/Leque-V5-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
-          sha256sum out/CloudStream-Leque-V5-Debug.apk > out/SHA256SUMS.txt
+          sha256sum out/CloudStream-by-Leque-v5.0.1-Debug.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
-          name: CloudStream-Leque-V5-Debug
+          name: CloudStream-by-Leque-v5.0.1-Debug
           path: out/
           if-no-files-found: error
           retention-days: 30

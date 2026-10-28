@@ -35,21 +35,21 @@ patch(p,'''    val PREBUILT_REPOSITORIES: Array<RepositoryData> by lazy {
         )
     }''')
 p="app/src/main/res/values/donottranslate-strings.xml"
-patch(p,'<string name="default_account">@string/action_default</string>','<string name="default_account">Mod v5 by Leque</string>\n    <string name="leque_app_name">CloudStream Leque V5</string>')
+patch(p,'<string name="default_account">@string/action_default</string>','<string name="default_account">AutoPlaylist by Leque</string>\n    <string name="leque_app_name">CloudStream by Leque</string>')
 p="app/src/main/AndroidManifest.xml"
 patch(p,'android:label="@string/app_name"','android:label="@string/leque_app_name"')
 patch(p,'android:taskAffinity="com.lagradost.cloudstream3.downloadedplayer"','android:taskAffinity="com.leque.cloudstreamv5.downloadedplayer"')
 p="app/build.gradle.kts"
 patch(p,'applicationId = "com.lagradost.cloudstream3"','applicationId = "com.leque.cloudstreamv5"')
 p="gradle/libs.versions.toml"
-patch(p,'versionCode = "68"','versionCode = "50000"')
-patch(p,'versionName = "4.8.0"','versionName = "5.0.0"')
+patch(p,'versionCode = "68"','versionCode = "50001"')
+patch(p,'versionName = "4.8.0"','versionName = "5.0.1"')
 p="app/src/main/java/com/lagradost/cloudstream3/ui/settings/GithubReleases.kt"
 patch(p,'const val APK_USERNAME = "recloudstream"','const val APK_USERNAME = "YumAbd"')
-patch(p,'const val APK_REPOSITORY = "cloudstream"','const val APK_REPOSITORY = "cloudstream-leque-app"')
+patch(p,'const val APK_REPOSITORY = "cloudstream"','const val APK_REPOSITORY = "cloudstream-leque"')
 p="app/src/main/java/com/lagradost/cloudstream3/utils/InAppUpdater.kt"
 patch(p,'private const val GITHUB_USER_NAME = "recloudstream"','private const val GITHUB_USER_NAME = "YumAbd"')
-patch(p,'private const val GITHUB_REPO = "cloudstream"','private const val GITHUB_REPO = "cloudstream-leque-app"')
+patch(p,'private const val GITHUB_REPO = "cloudstream"','private const val GITHUB_REPO = "cloudstream-leque"')
 patch(p,'private const val PRERELEASE_PACKAGE_NAME = "com.lagradost.cloudstream3.prerelease"','private const val PRERELEASE_PACKAGE_NAME = "com.leque.cloudstreamv5.prerelease"')
 p="shared/src/commonMain/kotlin/com/lagradost/cloudstream4/DevicePreferenceStore.kt"
 patch(p,'val showAppUpdates = preferences.getBoolean("auto_update", true)','val showAppUpdates = preferences.getBoolean("auto_update", false)')
@@ -58,11 +58,11 @@ if 'val autoUpdate = preferences.getBoolean("auto_update_plugins", true)' not in
 p="app/src/main/res/xml/settings_updates.xml"
 patch(p,'android:title="@string/updates_settings"\n            app:defaultValue="true"','android:title="@string/updates_settings"\n            app:defaultValue="false"')
 p="app/src/main/res/values/strings.xml"
-patch(p,'<string name="app_name">CloudStream</string>','<string name="app_name">CloudStream Leque V5</string>')
+patch(p,'<string name="app_name">CloudStream</string>','<string name="app_name">CloudStream by Leque</string>')
 p="app/src/debug/res/values/strings.xml"
-patch(p,'<string name="app_name">CloudStream Debug</string>','<string name="app_name">CloudStream Leque V5</string>')
+patch(p,'<string name="app_name">CloudStream Debug</string>','<string name="app_name">CloudStream by Leque</string>')
 p="shared/src/commonMain/composeResources/values/strings.xml"
-patch(p,'<string name="app_name">CloudStream</string>','<string name="app_name">CloudStream Leque V5</string>')
+patch(p,'<string name="app_name">CloudStream</string>','<string name="app_name">CloudStream by Leque</string>')
 p="app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsUpdates.kt"
 patch(p,'pref.isVisible = BuildConfig.FLAVOR == "stable"','pref.isVisible = false // no Leque prerelease yet')
 p="app/src/main/java/com/lagradost/cloudstream3/ui/settings/SettingsUpdatesScreen.kt"
