@@ -1,0 +1,50 @@
+name: Verify Leque default provider download
+on:
+  push:
+    branches: [apk-build]
+    paths:
+      - '.github/workflows/leque-verify-provider.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch current Leque catalog and hash selected extension
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, hashlib, urllib.request, sys, zipfile, io
+          index = "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/sumber.json"
+          headers = {"User-Agent":"LequeExtensionIntegrityProbe/1.0"}
+          req=urllib.request.Request(index,headers=headers)
+          with urllib.request.urlopen(req,timeout=25) as response:
+              items=json.load(response)
+          selected=[e for e in items if e.get("internalName")=="Pencurimovie"]
+          if len(selected)!=1:
+              sys.exit("Cannot verify: Pencurimovie not found exactly once")
+          entry=selected[0]
+          url=entry["url"]
+          if not url.startswith("https://"):
+              sys.exit("Unsafe provider URL")
+          with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=25) as response:
+              payload=response.read(3_000_000)
+          if not payload or len(payload)>=3_000_000:
+              sys.exit("Invalid provider binary length")
+          try:
+              with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                  print("Archive members:",archive.namelist()[:10])
+          except zipfile.BadZipFile:
+              sys.exit("Invalid provider archive")
+          digest=hashlib.sha256(payload).hexdigest()
+          print("PENCURIMOVIE_LENGTH="+str(len(payload)))
+          print("PENCURIMOVIE_SHA256="+digest)
+          print("UPSTREAM_EXPECTED_SIZE="+str(entry.get("fileSize")))
+          if entry.get("fileSize") and len(payload)!=entry["fileSize"]:
+              sys.exit("Metadata fileSize mismatch")
+          print("PASS: Provider archive retrieved and hashed; this does NOT audit its runtime behavior.")
+          PY
