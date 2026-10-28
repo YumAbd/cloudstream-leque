@@ -1,6 +1,6 @@
 {
-  "name": "CloudStream Mod V5 by Leque",
-  "description": "Repository ekstensi yang dikendalikan sendiri oleh Leque",
+  "name": "CloudStream AutoPlaylist by Leque",
+  "description": "Repository extension by Leque",
   "manifestVersion": 1,
   "pluginLists": [
     "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/sumber.json"
