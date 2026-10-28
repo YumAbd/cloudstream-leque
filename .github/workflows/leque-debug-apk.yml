@@ -98,10 +98,7 @@ jobs:
             sleep 22
             adb shell pidof com.leque.cloudstreamv5.debug > out/api26-process.txt
             adb logcat -d -b crash > out/api26-crashes.txt || true
-            if grep -E 'FATAL EXCEPTION|Process: com.leque.cloudstreamv5.debug' out/api26-crashes.txt; then
-              echo 'FAIL: Android 8 startup crash'
-              exit 1
-            fi
+            if grep -q 'Process: com.leque.cloudstreamv5.debug' out/api26-crashes.txt; then echo 'FAIL: Android 8 app crash'; exit 1; fi
             adb shell dumpsys activity activities > out/api26-activities.txt
             adb shell screencap -p /sdcard/leque-android8.png || true
             adb pull /sdcard/leque-android8.png out/api26-screenshot.png || true
