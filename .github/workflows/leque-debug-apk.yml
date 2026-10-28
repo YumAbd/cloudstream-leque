@@ -64,3 +64,58 @@ jobs:
           path: out/
           if-no-files-found: error
           retention-days: 30
+      - name: Verify minSdk is Android 8 compatible
+        run: |
+          APK=out/CloudStream-by-Leque-v5.0.1-Debug.apk
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" > out/apk-badging.txt
+          grep -E "^(package:|sdkVersion:|targetSdkVersion:)" out/apk-badging.txt
+          MIN_SDK="$(sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p" out/apk-badging.txt)"
+          test -n "$MIN_SDK"
+          test "$MIN_SDK" -le 26
+          grep "package: name='com.leque.cloudstreamv5.debug'" out/apk-badging.txt
+      - name: Enable KVM for Android 8 emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch Leque on Android 8.0 API 26 emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 26
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
+            adb logcat -c || true
+            adb install -r out/CloudStream-by-Leque-v5.0.1-Debug.apk
+            adb shell am start -W -n com.leque.cloudstreamv5.debug/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
+            sleep 22
+            adb shell pidof com.leque.cloudstreamv5.debug > out/api26-process.txt
+            adb logcat -d -b crash > out/api26-crashes.txt || true
+            if grep -E 'FATAL EXCEPTION|Process: com.leque.cloudstreamv5.debug' out/api26-crashes.txt; then
+              echo 'FAIL: Android 8 startup crash'
+              exit 1
+            fi
+            adb shell dumpsys activity activities > out/api26-activities.txt
+            adb shell screencap -p /sdcard/leque-android8.png || true
+            adb pull /sdcard/leque-android8.png out/api26-screenshot.png || true
+            echo 'PASS: installed and running on Android 8.0 API 26 without fatal exception'
+      - name: Upload Android 8 verification report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: CloudStream-Leque-v5.0.1-Android8-Evidence
+          path: |
+            out/apk-badging.txt
+            out/api26-process.txt
+            out/api26-crashes.txt
+            out/api26-activities.txt
+            out/api26-screenshot.png
+          if-no-files-found: warn
+          retention-days: 14
