@@ -1,0 +1,61 @@
+name: Build CloudStream Leque V5 Debug APK
+on:
+  push:
+    branches: [apk-build]
+    paths:
+      - '.github/workflows/leque-debug-apk.yml'
+      - 'leque/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android API 37
+        run: |
+          sdkmanager --install 'platforms;android-37'
+          test -d "$ANDROID_HOME/platforms/android-37"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Download official CloudStream (pinned)
+        run: |
+          git clone --quiet --depth 1 --branch master https://github.com/recloudstream/cloudstream.git upstream
+          git -C upstream fetch --quiet --depth 1 origin 5024ace2922a148d38df2a816b483b529789cf58
+          git -C upstream checkout --quiet --detach 5024ace2922a148d38df2a816b483b529789cf58
+      - name: Apply Leque customization
+        run: |
+          python3 leque/customize.py upstream
+          git -C upstream diff --check
+      - name: Compile Android debug APK
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleStableDebug
+      - name: Collect APK and patch
+        run: |
+          mkdir -p out
+          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudStream-Leque-V5-Debug.apk \;
+          test -s out/CloudStream-Leque-V5-Debug.apk
+          git -C upstream diff --binary > out/Leque-V5-source.patch
+          cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
+          sha256sum out/CloudStream-Leque-V5-Debug.apk > out/SHA256SUMS.txt
+          cat out/SHA256SUMS.txt
+      - name: Upload Leque debug build
+        uses: actions/upload-artifact@v7
+        with:
+          name: CloudStream-Leque-V5-Debug
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
