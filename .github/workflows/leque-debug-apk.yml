@@ -90,7 +90,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -euo pipefail
+            set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
             adb install -r out/CloudStream-by-Leque-v5.0.1-Debug.apk
