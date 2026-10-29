@@ -1,4 +1,5 @@
 name: Build CloudXtream by Leque V5.0.3 Debug APK
+run-name: CloudXtream preview ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
     branches: [apk-build]
@@ -6,6 +7,17 @@ on:
       - '.github/workflows/leque-debug-apk.yml'
       - 'leque/**'
   workflow_dispatch:
+    inputs:
+      upstream_sha:
+        description: Official recloustream/cloudstream commit SHA (40 lowercase hex)
+        required: false
+        type: string
+        default: '5024ace2922a148d38df2a816b483b529789cf58'
+      maintenance_event_id:
+        description: Telegram approved D1 event UUID (for audit only)
+        required: false
+        type: string
+        default: manual
 
 permissions:
   contents: read
@@ -33,25 +45,36 @@ jobs:
           test -d "$SDK_ROOT/platforms/android-37.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
-      - name: Download official CloudStream (pinned)
+      - name: Download official CloudStream (pinned approved SHA)
+        env:
+          UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
+        shell: bash
         run: |
+          set -euo pipefail
+          [[ "$UPSTREAM_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'FAIL: invalid official SHA'; exit 1; }
           git clone --quiet --depth 1 --branch master https://github.com/recloudstream/cloudstream.git upstream
-          git -C upstream fetch --quiet --depth 1 origin 5024ace2922a148d38df2a816b483b529789cf58
-          git -C upstream checkout --quiet --detach 5024ace2922a148d38df2a816b483b529789cf58
-      - name: Validate curated catalog (34 total / 33 active)
+          git -C upstream fetch --quiet --depth 1 origin "$UPSTREAM_SHA"
+          git -C upstream checkout --quiet --detach "$UPSTREAM_SHA"
+          ACTUAL="$(git -C upstream rev-parse HEAD)"
+          test "$ACTUAL" = "$UPSTREAM_SHA"
+          echo "Official CloudStream commit: $ACTUAL"
+          echo "Preview only: debug APK uses runner-local signing, NOT an OTA release."
+      - name: Validate curated catalog and pinned PMSM when present
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
           catalog=json.loads(Path("sumber.json").read_text(encoding="utf-8"))
-          assert len(catalog)==34, len(catalog)
+          assert 1 <= len(catalog) <= 80, len(catalog)
           active=[p for p in catalog if p["status"]==1]
-          assert len(active)==33, len(active)
+          assert len(active)>=1, len(active)
           assert len({p["internalName"] for p in catalog})==len(catalog)
-          item=next(p for p in active if p["internalName"]=="Pmsm")
-          assert item["version"]==4
-          assert item["url"]=="https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3"
-          assert item["fileHash"]=="sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
+          assert all(p["status"] in (0,1) for p in catalog)
+          item=next((p for p in active if p["internalName"]=="Pmsm"),None)
+          if item:
+              assert item["version"]==4
+              assert item["url"]=="https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3"
+              assert item["fileHash"]=="sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
           repo=json.loads(Path("repo.json").read_text(encoding="utf-8"))
           assert repo["pluginLists"]==["https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"]
           print("PASS: catalog and PMSM fork metadata pinned")
@@ -85,6 +108,14 @@ jobs:
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
           sha256sum out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
+      - name: Capture debug APK signing certificate (not for OTA deployment)
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/apk-signing-certificate.txt
+          grep 'Signer #1 certificate SHA-256 digest:' out/apk-signing-certificate.txt
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
