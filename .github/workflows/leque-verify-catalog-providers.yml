@@ -1,0 +1,98 @@
+name: Verify CloudXtream MovieBox and Kisskh plugin updates
+on:
+  push:
+    branches: [apk-build]
+    paths:
+      - 'sumber.json'
+      - '.github/workflows/leque-verify-catalog-providers.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify updated extension archives match signed catalog hashes
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import io
+          import json
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+
+          index = json.loads(Path("sumber.json").read_text(encoding="utf-8"))
+          assert len(index) == 34
+          assert sum(p.get("status")==1 for p in index) == 33
+          for name, version in (("MovieBoxProvider", 39), ("KisskhProvider", 24)):
+              selected = [p for p in index if p.get("internalName") == name]
+              assert len(selected) == 1, (name, len(selected))
+              plugin = selected[0]
+              assert plugin["version"] == version and plugin["status"] == 1, plugin
+              assert plugin["url"].startswith("https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/builds/"), name
+              request = urllib.request.Request(
+                  plugin["url"],
+                  headers={"User-Agent":"CloudXtream-Integrity-Test/1.0"}
+              )
+              with urllib.request.urlopen(request,timeout=45) as response:
+                  binary = response.read(5_000_001)
+              assert 0 < len(binary) <= 5_000_000, name
+              assert len(binary) == plugin["fileSize"], (name, len(binary), plugin["fileSize"])
+              actual = "sha256-" + hashlib.sha256(binary).hexdigest()
+              assert actual == plugin["fileHash"], (name, actual, plugin["fileHash"])
+              with zipfile.ZipFile(io.BytesIO(binary)) as archive:
+                  assert archive.testzip() is None
+                  names = archive.namelist()
+                  assert "manifest.json" in names, name
+                  assert any(n.endswith(".dex") for n in names), name
+                  manifest = json.loads(archive.read("manifest.json"))
+                  print(f"{name}: matched v{version} archive SHA256; manifest={manifest.get('name')}; pass")
+          print("PASS: archive integrity. Runtime and playback are separately verified.")
+          PY
+      - name: Download existing successful CloudXtream V5.0.3 APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download 40825688080 --repo YumAbd/cloudstream-leque --name CloudXtream-by-Leque-v5.0.3-Debug --dir out
+          test -s out/CloudXtream-by-Leque-v5.0.3-Debug.apk
+      - name: Enable KVM for Android 8 emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify both updated providers register in Android 8.0 emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 26
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -eu
+            adb install -r out/CloudXtream-by-Leque-v5.0.3-Debug.apk
+            adb logcat -c || true
+            adb shell am start -W -n com.leque.cloudstreamv5.debug/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
+            sleep 45
+            adb logcat -d -v time > out/provider-logcat-api26.txt
+            grep -F "Loaded plugin MovieBoxProvider successfully" out/provider-logcat-api26.txt
+            grep -F "Loaded plugin KisskhProvider successfully" out/provider-logcat-api26.txt
+            if grep -Fq "Download or load failed: MovieBoxProvider" out/provider-logcat-api26.txt; then exit 1; fi
+            if grep -Fq "Download or load failed: KisskhProvider" out/provider-logcat-api26.txt; then exit 1; fi
+            echo 'PASS: MovieBox and Kisskh extension classes registered on Android 8.0'
+      - name: Save runtime verification log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: CloudXtream-MovieBox-Kisskh-Provider-Evidence
+          path: out/provider-logcat-api26.txt
+          if-no-files-found: warn
+          retention-days: 14
