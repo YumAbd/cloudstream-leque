@@ -38,10 +38,15 @@ jobs:
           git clone --quiet --depth 1 --branch master https://github.com/recloudstream/cloudstream.git upstream
           git -C upstream fetch --quiet --depth 1 origin 5024ace2922a148d38df2a816b483b529789cf58
           git -C upstream checkout --quiet --detach 5024ace2922a148d38df2a816b483b529789cf58
+      - name: Prepare logo renderer
+        run: |
+          python3 -m venv .leque-icon-venv
+          .leque-icon-venv/bin/python -m pip install --disable-pip-version-check 'Pillow==11.3.0' 'CairoSVG==2.8.2'
       - name: Apply Leque customization
         run: |
           python3 leque/customize.py upstream
           python3 leque/customize_v52.py upstream
+          .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream diff --check
       - name: Compile Android debug APK
         working-directory: upstream
