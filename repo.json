@@ -1,8 +1,8 @@
 {
-  "name": "CloudStream AutoPlaylist by Leque",
-  "description": "Repository extension by Leque",
+  "name": "CloudXtream AutoPlaylist by Leque",
+  "description": "Curated test repository for CloudXtream by Leque 5.0.3",
   "manifestVersion": 1,
   "pluginLists": [
-    "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/main/sumber.json"
+    "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"
   ]
 }

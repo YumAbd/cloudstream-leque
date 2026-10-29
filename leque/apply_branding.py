@@ -36,8 +36,8 @@ def make_icon(size: int, width_ratio: float, background: bool, monochrome: bool 
 
 res = ROOT / "app/src/main/res"
 (res / "drawable-nodpi").mkdir(parents=True, exist_ok=True)
-make_icon(432, 0.64, False).save(res / "drawable-nodpi/leque_launcher_foreground.png", optimize=True)
-make_icon(432, 0.64, False, monochrome=True).save(res / "drawable-nodpi/leque_launcher_monochrome.png", optimize=True)
+make_icon(432, 0.54, False).save(res / "drawable-nodpi/leque_launcher_foreground.png", optimize=True)
+make_icon(432, 0.54, False, monochrome=True).save(res / "drawable-nodpi/leque_launcher_monochrome.png", optimize=True)
 
 adaptive_xml = """<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -60,10 +60,10 @@ for variant in ("main", "debug"):
             target = folder / name
             if not target.is_file():
                 raise SystemExit(f"Missing legacy icon: {target}")
-            make_icon(px, 0.76, True).convert("RGB").save(target, optimize=True)
+            make_icon(px, 0.62, True).convert("RGB").save(target, optimize=True)
     playstore = ROOT / "app/src" / variant / "ic_launcher-playstore.png"
     if not playstore.is_file():
         raise SystemExit(f"Missing Play Store icon: {playstore}")
-    make_icon(512, 0.76, True).convert("RGB").save(playstore, optimize=True)
+    make_icon(512, 0.62, True).convert("RGB").save(playstore, optimize=True)
 
 print("PASS: CLOUDX blue/cyan branding applied to main + debug launcher assets")

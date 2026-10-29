@@ -1,4 +1,4 @@
-name: Build CloudStream by Leque V5.0.2 Debug APK
+name: Build CloudXtream by Leque V5.0.3 Debug APK
 on:
   push:
     branches: [apk-build]
@@ -38,6 +38,28 @@ jobs:
           git clone --quiet --depth 1 --branch master https://github.com/recloudstream/cloudstream.git upstream
           git -C upstream fetch --quiet --depth 1 origin 5024ace2922a148d38df2a816b483b529789cf58
           git -C upstream checkout --quiet --detach 5024ace2922a148d38df2a816b483b529789cf58
+      - name: Validate curated catalog (34 total / 33 active)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          catalog=json.loads(Path("sumber.json").read_text(encoding="utf-8"))
+          assert len(catalog)==34, len(catalog)
+          active=[p for p in catalog if p["status"]==1]
+          assert len(active)==33, len(active)
+          assert len({p["internalName"] for p in catalog})==len(catalog)
+          item=next(p for p in active if p["internalName"]=="Pmsm")
+          assert item["version"]==4
+          assert item["url"]=="https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3"
+          assert item["fileHash"]=="sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
+          repo=json.loads(Path("repo.json").read_text(encoding="utf-8"))
+          assert repo["pluginLists"]==["https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"]
+          print("PASS: catalog and PMSM fork metadata pinned")
+          PY
+      - name: Validate alternative PMSM download SHA256
+        run: |
+          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/Pmsm.cs3 https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3
+          echo 'd145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253  /tmp/Pmsm.cs3' | sha256sum -c -
       - name: Prepare logo renderer
         run: |
           python3 -m venv .leque-icon-venv
@@ -46,6 +68,7 @@ jobs:
         run: |
           python3 leque/customize.py upstream
           python3 leque/customize_v52.py upstream
+          python3 leque/customize_v53.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream diff --check
       - name: Compile Android debug APK
@@ -56,22 +79,22 @@ jobs:
       - name: Collect APK and patch
         run: |
           mkdir -p out
-          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudStream-by-Leque-v5.0.2-Debug.apk \;
-          test -s out/CloudStream-by-Leque-v5.0.2-Debug.apk
-          git -C upstream diff --binary > out/Leque-V5-source.patch
+          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.3-Debug.apk \;
+          test -s out/CloudXtream-by-Leque-v5.0.3-Debug.apk
+          git -C upstream diff --binary > out/CloudXtream-V5.0.3-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
-          sha256sum out/CloudStream-by-Leque-v5.0.2-Debug.apk > out/SHA256SUMS.txt
+          sha256sum out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
-          name: CloudStream-by-Leque-v5.0.2-Debug
+          name: CloudXtream-by-Leque-v5.0.3-Debug
           path: out/
           if-no-files-found: error
           retention-days: 30
       - name: Verify minSdk is Android 8 compatible
         run: |
-          APK=out/CloudStream-by-Leque-v5.0.2-Debug.apk
+          APK=out/CloudXtream-by-Leque-v5.0.3-Debug.apk
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" > out/apk-badging.txt
@@ -98,11 +121,12 @@ jobs:
             set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
-            adb install -r out/CloudStream-by-Leque-v5.0.2-Debug.apk
+            adb install -r out/CloudXtream-by-Leque-v5.0.3-Debug.apk
             adb shell am start -W -n com.leque.cloudstreamv5.debug/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
             sleep 22
             adb shell pidof com.leque.cloudstreamv5.debug > out/api26-process.txt
             adb logcat -d -b crash > out/api26-crashes.txt || true
+            adb logcat -d -s LequePluginSync:I > out/api26-plugin-sync.txt || true
             if grep -q 'Process: com.leque.cloudstreamv5.debug' out/api26-crashes.txt; then echo 'FAIL: Android 8 app crash'; exit 1; fi
             adb shell dumpsys activity activities > out/api26-activities.txt
             adb shell screencap -p /sdcard/leque-android8.png || true
@@ -112,12 +136,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: CloudStream-Leque-v5.0.2-Android8-Evidence
+          name: CloudXtream-Leque-v5.0.3-Android8-Evidence
           path: |
             out/apk-badging.txt
             out/api26-process.txt
             out/api26-crashes.txt
             out/api26-activities.txt
+            out/api26-plugin-sync.txt
             out/api26-screenshot.png
           if-no-files-found: warn
           retention-days: 14
