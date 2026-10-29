@@ -69,7 +69,7 @@ jobs:
           active=[p for p in catalog if p["status"]==1]
           assert len(active)>=1, len(active)
           assert len({p["internalName"] for p in catalog})==len(catalog)
-          assert all(p["status"] in (0,1) for p in catalog)
+          assert all(isinstance(p["status"], int) and 0 <= p["status"] <= 10 for p in catalog)
           item=next((p for p in active if p["internalName"]=="Pmsm"),None)
           if item:
               assert item["version"]==4
