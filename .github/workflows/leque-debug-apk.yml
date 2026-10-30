@@ -170,9 +170,8 @@ jobs:
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
             adb install -r out/CloudXtream-by-Leque-v5.0.5-ActivationFixPreview.apk
-            TEST_APK="$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
-            test -n "$TEST_APK"
-            adb install -r "$TEST_APK"
+            test -n "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
+            adb install -r "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb shell am instrument -w -e class com.lagradost.cloudstream3.activation.CxKeystoreProofTest com.leque.cloudstreamv5.debug.activationfix.test/androidx.test.runner.AndroidJUnitRunner > out/api26-keystore-test.txt
             cat out/api26-keystore-test.txt
             grep -q 'OK (1 test)' out/api26-keystore-test.txt || { echo 'FAIL: Android 8 real Keystore proof failed'; exit 1; }
