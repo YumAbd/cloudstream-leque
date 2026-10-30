@@ -1,0 +1,242 @@
+name: Release CloudXtream signed APK
+run-name: CloudXtream release ${{ inputs.release_tag || github.ref_name }} (${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }})
+on:
+  # Pushing a tag such as v5.0.6 (on a commit from apk-build) publishes a pre-release.
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag, must equal the patched app version (e.g. v5.0.6)
+        required: true
+        type: string
+        default: v5.0.6
+      upstream_sha:
+        description: Official recloudstream/cloudstream commit SHA (40 lowercase hex)
+        required: true
+        type: string
+        default: '5024ace2922a148d38df2a816b483b529789cf58'
+      prerelease:
+        description: Mark the GitHub Release as pre-release
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudxtream-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    # Releases come only from the reviewed APK build branch (directly, or via a tag on it).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/apk-build') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Fail closed unless the release signing secrets exist
+        env:
+          KS_B64: ${{ secrets.CX_RELEASE_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.CX_RELEASE_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.CX_RELEASE_KEY_ALIAS }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'FAIL: invalid release tag'; exit 1; }
+          test "${#KS_B64}" -gt 1000 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_B64'; exit 1; }
+          test "${#KS_PASS}" -ge 20 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_PASSWORD'; exit 1; }
+          test -n "$KS_ALIAS" || { echo '::error::Missing secret CX_RELEASE_KEY_ALIAS'; exit 1; }
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fail closed unless the release commit is on apk-build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet --no-tags origin apk-build
+          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+            echo '::error::Release commit is not part of apk-build'; exit 1; }
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Use Android SDK from GitHub runner and install API 37
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDK_MANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -x "$SDK_MANAGER"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$SDK_MANAGER" --licenses > /dev/null || true
+          "$SDK_MANAGER" --install 'platforms;android-37.0'
+          test -d "$SDK_ROOT/platforms/android-37.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Download official CloudStream (pinned approved SHA)
+        env:
+          UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPSTREAM_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'FAIL: invalid official SHA'; exit 1; }
+          git clone --quiet --depth 1 --branch master https://github.com/recloudstream/cloudstream.git upstream
+          git -C upstream fetch --quiet --depth 1 origin "$UPSTREAM_SHA"
+          git -C upstream checkout --quiet --detach "$UPSTREAM_SHA"
+          ACTUAL="$(git -C upstream rev-parse HEAD)"
+          test "$ACTUAL" = "$UPSTREAM_SHA"
+          echo "Official CloudStream commit: $ACTUAL"
+      - name: Validate curated catalog and pinned PMSM when present
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          catalog=json.loads(Path("sumber.json").read_text(encoding="utf-8"))
+          assert 1 <= len(catalog) <= 80, len(catalog)
+          active=[p for p in catalog if p["status"]==1]
+          assert len(active)>=1, len(active)
+          assert len({p["internalName"] for p in catalog})==len(catalog)
+          assert all(isinstance(p["status"], int) and 0 <= p["status"] <= 10 for p in catalog)
+          item=next((p for p in active if p["internalName"]=="Pmsm"),None)
+          if item:
+              assert item["version"]==4
+              assert item["url"]=="https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3"
+              assert item["fileHash"]=="sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
+          repo=json.loads(Path("repo.json").read_text(encoding="utf-8"))
+          assert repo["pluginLists"]==["https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"]
+          print("PASS: catalog and PMSM fork metadata pinned")
+          PY
+      - name: Validate alternative PMSM download SHA256
+        run: |
+          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/Pmsm.cs3 https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3
+          echo 'd145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253  /tmp/Pmsm.cs3' | sha256sum -c -
+      - name: Prepare logo renderer
+        run: |
+          python3 -m venv .leque-icon-venv
+          .leque-icon-venv/bin/python -m pip install --disable-pip-version-check 'Pillow==11.3.0' 'CairoSVG==2.8.2'
+      - name: Apply Leque customization
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python3 leque/customize.py upstream
+          python3 leque/customize_v52.py upstream
+          python3 leque/customize_v53.py upstream
+          python3 leque/enable_activation_v54.py upstream
+          python3 leque/fix_activation_v55.py upstream
+          python3 leque/fix_activation_v56.py upstream
+          .leque-icon-venv/bin/python leque/apply_branding.py upstream
+          git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
+          VERSION="$(sed -n 's/^versionName = "\(.*\)"/\1/p' upstream/gradle/libs.versions.toml)"
+          test "v$VERSION" = "$RELEASE_TAG" || { echo "FAIL: tag $RELEASE_TAG does not match app version $VERSION"; exit 1; }
+          git -C upstream diff --check
+      - name: Compile Android stable release APK (unsigned)
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleStableRelease
+      - name: Sign with the CloudXtream release key and verify the pinned certificate
+        env:
+          KS_B64: ${{ secrets.CX_RELEASE_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.CX_RELEASE_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.CX_RELEASE_KEY_ALIAS }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          UNSIGNED="$(find upstream/app/build/outputs/apk/stable/release -type f -name '*.apk' -print -quit)"
+          test -s "$UNSIGNED"
+          KS="$RUNNER_TEMP/cx-release.jks"
+          umask 077
+          printf '%s' "$KS_B64" | tr -d ' \r\n' | base64 -d > "$KS"
+          mkdir -p out
+          APK="out/CloudXtream-by-Leque-${RELEASE_TAG}.apk"
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$KS" --ks-key-alias "$KS_ALIAS" \
+            --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out "$APK" "$RUNNER_TEMP/aligned.apk"
+          rm -f "$KS" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --min-sdk-version 26 --print-certs --verbose "$APK" > out/apk-signing-certificate.txt
+          cat out/apk-signing-certificate.txt
+          EXPECTED="$(tr -d ' \r\n' < leque/release-signing-cert.sha256)"
+          # Every signer line (v1/v2/v3) must carry exactly the pinned certificate.
+          ACTUAL="$(grep -E 'certificate SHA-256 digest: [a-f0-9]{64}$' out/apk-signing-certificate.txt | awk '{print $NF}' | sort -u)"
+          test "$ACTUAL" = "$EXPECTED" || {
+            echo '::error::APK is not signed by the pinned CloudXtream release certificate'; exit 1; }
+          "$BT/aapt" dump badging "$APK" > out/apk-badging.txt
+          grep -E "^(package:|sdkVersion:|targetSdkVersion:)" out/apk-badging.txt
+          grep -q "package: name='com.leque.cloudstreamv5' " out/apk-badging.txt
+          MIN_SDK="$(sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p" out/apk-badging.txt)"
+          test "$MIN_SDK" -le 26
+          git -C upstream diff --binary > "out/CloudXtream-${RELEASE_TAG}-source.patch"
+          cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
+          (cd out && sha256sum "CloudXtream-by-Leque-${RELEASE_TAG}.apk" > SHA256SUMS.txt)
+          cat out/SHA256SUMS.txt
+      - name: Enable KVM for Android 8 emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch the signed release on Android 8.0 API 26
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        with:
+          api-level: 26
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -eu
+            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
+            adb logcat -c || true
+            adb install -r "out/CloudXtream-by-Leque-$RELEASE_TAG.apk"
+            adb shell am start -W -n com.leque.cloudstreamv5/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
+            sleep 22
+            adb logcat -d -b crash > out/api26-crashes.txt || true
+            if grep -q 'Process: com.leque.cloudstreamv5' out/api26-crashes.txt; then cat out/api26-crashes.txt; echo 'FAIL: Android 8 app crash'; exit 1; fi
+            adb shell dumpsys activity activities > out/api26-activities.txt
+            grep -q 'CxActivationActivity' out/api26-activities.txt || { echo 'FAIL: expected activation screen on Android 8'; exit 1; }
+            echo 'PASS: signed release installs and opens the activation screen on Android 8.0'
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
+          PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists; bump the app version instead of replacing a signed APK"; exit 1
+          fi
+          FP="$(tr -d ' \r\n' < leque/release-signing-cert.sha256)"
+          SUM="$(cut -d' ' -f1 out/SHA256SUMS.txt)"
+          {
+            echo "CloudXtream by Leque $RELEASE_TAG (signed release)."
+            echo
+            echo "- Package: \`com.leque.cloudstreamv5\` (installs alongside debug previews)"
+            echo "- Android 8.0+ (API 26). Requires an activation PIN from the owner."
+            echo "- Built from official CloudStream \`$UPSTREAM_SHA\` + Leque patches (\`$GITHUB_SHA\`)."
+            echo "- APK SHA-256: \`$SUM\`"
+            echo "- Signing certificate SHA-256: \`$FP\`"
+            echo
+            echo "Future releases signed with the same certificate update in place."
+            echo "CloudStream is GPL-3.0; the corresponding source patch and license are attached."
+          } > "$RUNNER_TEMP/notes.md"
+          FLAGS=()
+          if [ "$PRERELEASE" = "true" ]; then FLAGS+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "CloudXtream by Leque $RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" "${FLAGS[@]}" \
+            "out/CloudXtream-by-Leque-$RELEASE_TAG.apk" out/SHA256SUMS.txt \
+            "out/CloudXtream-$RELEASE_TAG-source.patch" out/CloudStream-GPL-3.0-LICENSE.txt \
+            out/apk-signing-certificate.txt
