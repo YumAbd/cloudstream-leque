@@ -1,4 +1,4 @@
-name: Build CloudXtream by Leque V5.0.3 Debug APK
+name: Build CloudXtream V5.0.4 Activation Preview APK
 run-name: CloudXtream preview ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
@@ -92,7 +92,9 @@ jobs:
           python3 leque/customize.py upstream
           python3 leque/customize_v52.py upstream
           python3 leque/customize_v53.py upstream
+          python3 leque/enable_activation_v54.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
+          git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt
           git -C upstream diff --check
       - name: Compile Android debug APK
         working-directory: upstream
@@ -102,11 +104,11 @@ jobs:
       - name: Collect APK and patch
         run: |
           mkdir -p out
-          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.3-Debug.apk \;
-          test -s out/CloudXtream-by-Leque-v5.0.3-Debug.apk
-          git -C upstream diff --binary > out/CloudXtream-V5.0.3-source.patch
+          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk \;
+          test -s out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk
+          git -C upstream diff --binary > out/CloudXtream-V5.0.4-ActivationPreview-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
-          sha256sum out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/SHA256SUMS.txt
+          sha256sum out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
       - name: Capture debug APK signing certificate (not for OTA deployment)
         shell: bash
@@ -114,26 +116,26 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/apk-signing-certificate.txt 2>&1; then
+          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk > out/apk-signing-certificate.txt 2>&1; then
             echo 'FAIL: APK signature verification failed; diagnostic output follows'
             cat out/apk-signing-certificate.txt
             exit 1
           fi
           cat out/apk-signing-certificate.txt
-          if ! grep -E 'Signer #1 certificate SHA-256 digest:' out/apk-signing-certificate.txt; then
+          if ! grep -E '^(V[234] Signer|Signer #1): certificate SHA-256 digest: [a-f0-9]{64}
             echo 'FAIL: Cannot extract signer SHA-256 fingerprint'
             exit 1
           fi
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
-          name: CloudXtream-by-Leque-v5.0.3-Debug
+          name: CloudXtream-by-Leque-v5.0.4-ActivationPreview
           path: out/
           if-no-files-found: error
           retention-days: 30
       - name: Verify minSdk is Android 8 compatible
         run: |
-          APK=out/CloudXtream-by-Leque-v5.0.3-Debug.apk
+          APK=out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" > out/apk-badging.txt
@@ -141,7 +143,7 @@ jobs:
           MIN_SDK="$(sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p" out/apk-badging.txt)"
           test -n "$MIN_SDK"
           test "$MIN_SDK" -le 26
-          grep "package: name='com.leque.cloudstreamv5.debug'" out/apk-badging.txt
+          grep "package: name='com.leque.cloudstreamv5.debug.activationpreview'" out/apk-badging.txt
       - name: Enable KVM for Android 8 emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -160,13 +162,82 @@ jobs:
             set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
-            adb install -r out/CloudXtream-by-Leque-v5.0.3-Debug.apk
-            adb shell am start -W -n com.leque.cloudstreamv5.debug/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
+            adb install -r out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk
+            adb shell am start -W -n com.leque.cloudstreamv5.debug.activationpreview/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
             sleep 22
-            adb shell pidof com.leque.cloudstreamv5.debug > out/api26-process.txt
+            adb shell pidof com.leque.cloudstreamv5.debug.activationpreview > out/api26-process.txt
             adb logcat -d -b crash > out/api26-crashes.txt || true
             adb logcat -d -s LequePluginSync:I > out/api26-plugin-sync.txt || true
-            if grep -q 'Process: com.leque.cloudstreamv5.debug' out/api26-crashes.txt; then echo 'FAIL: Android 8 app crash'; exit 1; fi
+            if grep -q 'Process: com.leque.cloudstreamv5.debug.activationpreview' out/api26-crashes.txt; then echo 'FAIL: Android 8 app crash'; exit 1; fi
+            adb shell dumpsys activity activities > out/api26-activities.txt
+            adb shell uiautomator dump /sdcard/cx-activation-ui.xml || true
+            adb pull /sdcard/cx-activation-ui.xml out/api26-activation-ui.xml || true
+            grep -q 'CxActivationActivity' out/api26-activities.txt || { echo 'FAIL: expected activation screen on Android 8'; exit 1; }
+            adb shell screencap -p /sdcard/leque-android8.png || true
+            adb pull /sdcard/leque-android8.png out/api26-screenshot.png || true
+            echo 'PASS: installed and running on Android 8.0 API 26 without fatal exception'
+      - name: Upload Android 8 verification report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: CloudXtream-Leque-v5.0.4-ActivationPreview-Android8-Evidence
+          path: |
+            out/apk-badging.txt
+            out/api26-process.txt
+            out/api26-crashes.txt
+            out/api26-activities.txt
+            out/api26-plugin-sync.txt
+            out/api26-screenshot.png
+            out/api26-activation-ui.xml
+          if-no-files-found: warn
+          retention-days: 14
+ out/apk-signing-certificate.txt; then
+            echo 'FAIL: Cannot extract signer SHA-256 fingerprint'
+            exit 1
+          fi
+      - name: Upload Leque debug build
+        uses: actions/upload-artifact@v7
+        with:
+          name: CloudXtream-by-Leque-v5.0.4-ActivationPreview
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify minSdk is Android 8 compatible
+        run: |
+          APK=out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" > out/apk-badging.txt
+          grep -E "^(package:|sdkVersion:|targetSdkVersion:)" out/apk-badging.txt
+          MIN_SDK="$(sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p" out/apk-badging.txt)"
+          test -n "$MIN_SDK"
+          test "$MIN_SDK" -le 26
+          grep "package: name='com.leque.cloudstreamv5.debug.activationpreview'" out/apk-badging.txt
+      - name: Enable KVM for Android 8 emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch Leque on Android 8.0 API 26 emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 26
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -eu
+            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
+            adb logcat -c || true
+            adb install -r out/CloudXtream-by-Leque-v5.0.4-ActivationPreview.apk
+            adb shell am start -W -n com.leque.cloudstreamv5.debug.activationpreview/com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
+            sleep 22
+            adb shell pidof com.leque.cloudstreamv5.debug.activationpreview > out/api26-process.txt
+            adb logcat -d -b crash > out/api26-crashes.txt || true
+            adb logcat -d -s LequePluginSync:I > out/api26-plugin-sync.txt || true
+            if grep -q 'Process: com.leque.cloudstreamv5.debug.activationpreview' out/api26-crashes.txt; then echo 'FAIL: Android 8 app crash'; exit 1; fi
             adb shell dumpsys activity activities > out/api26-activities.txt
             adb shell screencap -p /sdcard/leque-android8.png || true
             adb pull /sdcard/leque-android8.png out/api26-screenshot.png || true
@@ -175,7 +246,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: CloudXtream-Leque-v5.0.3-Android8-Evidence
+          name: CloudXtream-Leque-v5.0.4-ActivationPreview-Android8-Evidence
           path: |
             out/apk-badging.txt
             out/api26-process.txt
