@@ -114,8 +114,16 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          "$APKSIGNER" verify --print-certs out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/apk-signing-certificate.txt
-          grep 'Signer #1 certificate SHA-256 digest:' out/apk-signing-certificate.txt
+          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-by-Leque-v5.0.3-Debug.apk > out/apk-signing-certificate.txt 2>&1; then
+            echo 'FAIL: APK signature verification failed; diagnostic output follows'
+            cat out/apk-signing-certificate.txt
+            exit 1
+          fi
+          cat out/apk-signing-certificate.txt
+          if ! grep -E 'Signer #1 certificate SHA-256 digest:' out/apk-signing-certificate.txt; then
+            echo 'FAIL: Cannot extract signer SHA-256 fingerprint'
+            exit 1
+          fi
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
