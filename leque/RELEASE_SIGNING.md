@@ -1,7 +1,7 @@
 # CloudXtream signed releases
 
-Workflow: **Release CloudXtream signed APK** (`.github/workflows/leque-release-apk.yml`),
-manual `workflow_dispatch` on branch `apk-build` only.
+Workflow: **Release CloudXtream signed APK** (`.github/workflows/leque-release-apk.yml`). Push a tag `vX.Y.Z` on an `apk-build` commit (publishes a pre-release), or
+run it manually (`workflow_dispatch`) on branch `apk-build`.
 
 - Builds `:app:assembleStableRelease` (package `com.leque.cloudstreamv5`, no debug suffix,
   so it installs alongside debug previews), applies the same Leque patches as the preview.

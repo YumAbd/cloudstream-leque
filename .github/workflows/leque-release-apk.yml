@@ -1,6 +1,9 @@
 name: Release CloudXtream signed APK
-run-name: CloudXtream release ${{ inputs.release_tag }} (${{ inputs.upstream_sha }})
+run-name: CloudXtream release ${{ inputs.release_tag || github.ref_name }} (${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }})
 on:
+  # Pushing a tag such as v5.0.6 (on a commit from apk-build) publishes a pre-release.
+  push:
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
       release_tag:
@@ -30,15 +33,17 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 70
-    # Releases come only from the reviewed APK build branch.
-    if: github.ref == 'refs/heads/apk-build'
+    # Releases come only from the reviewed APK build branch (directly, or via a tag on it).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/apk-build') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Fail closed unless the release signing secrets exist
         env:
           KS_B64: ${{ secrets.CX_RELEASE_KEYSTORE_B64 }}
           KS_PASS: ${{ secrets.CX_RELEASE_KEYSTORE_PASSWORD }}
           KS_ALIAS: ${{ secrets.CX_RELEASE_KEY_ALIAS }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -46,6 +51,17 @@ jobs:
           test "${#KS_B64}" -gt 1000 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_B64'; exit 1; }
           test "${#KS_PASS}" -ge 20 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_PASSWORD'; exit 1; }
           test -n "$KS_ALIAS" || { echo '::error::Missing secret CX_RELEASE_KEY_ALIAS'; exit 1; }
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fail closed unless the release commit is on apk-build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet --no-tags origin apk-build
+          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+            echo '::error::Release commit is not part of apk-build'; exit 1; }
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
@@ -65,7 +81,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
       - name: Download official CloudStream (pinned approved SHA)
         env:
-          UPSTREAM_SHA: ${{ inputs.upstream_sha }}
+          UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -106,7 +122,7 @@ jobs:
           .leque-icon-venv/bin/python -m pip install --disable-pip-version-check 'Pillow==11.3.0' 'CairoSVG==2.8.2'
       - name: Apply Leque customization
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           python3 leque/customize.py upstream
           python3 leque/customize_v52.py upstream
@@ -129,7 +145,7 @@ jobs:
           KS_B64: ${{ secrets.CX_RELEASE_KEYSTORE_B64 }}
           KS_PASS: ${{ secrets.CX_RELEASE_KEYSTORE_PASSWORD }}
           KS_ALIAS: ${{ secrets.CX_RELEASE_KEY_ALIAS }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -171,7 +187,7 @@ jobs:
       - name: Install and launch the signed release on Android 8.0 API 26
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         with:
           api-level: 26
           arch: x86_64
@@ -194,9 +210,9 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          UPSTREAM_SHA: ${{ inputs.upstream_sha }}
-          PRERELEASE: ${{ inputs.prerelease }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
+          PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease }}
         shell: bash
         run: |
           set -euo pipefail
