@@ -1,4 +1,4 @@
-// CloudXtream licensed-activation preview; online verification required every 60 seconds.
+// CloudXtream licensed-activation preview; online verification lease follows the server (currently 300 s).
 // Cryptographic private key never leaves Android Keystore.
 package com.lagradost.cloudstream3.activation
 
@@ -34,6 +34,9 @@ object CxWorkerActivation {
     private const val PREFS = "cx_worker_activation_2026_v1"
     private const val DEVICE_ID = "device_id"
     private const val MAX_RESPONSE = 16384
+    // Server lease (revalidate_in) is clamped locally so a bad response cannot extend it.
+    private const val MIN_LEASE_SECONDS = 30L
+    private const val MAX_LEASE_SECONDS = 600L
     // Set from private build configuration after deploying Cloudflare Workers.
     // Never use a domain from an untrusted intent or editable user preference.
     private const val SERVER_ORIGIN = "https://cloudxpanel.infopc.xyz"
@@ -61,6 +64,14 @@ object CxWorkerActivation {
     }
 
     fun hasFreshCheck(): Boolean = SystemClock.elapsedRealtime() < checkedUntilElapsed
+    /** True when the lease ends within [withinMs]; periodic checks only call the server then. */
+    fun needsRenewal(withinMs: Long): Boolean =
+        SystemClock.elapsedRealtime()+withinMs >= checkedUntilElapsed
+
+    private fun leaseMillis(response: JSONObject): Long {
+        val seconds=response.optLong("revalidate_in",60L).coerceIn(MIN_LEASE_SECONDS,MAX_LEASE_SECONDS)
+        return seconds*1000L-5_000L
+    }
     fun hasAdminAccess(): Boolean = hasFreshCheck() &&
         SystemClock.elapsedRealtime() < adminUntilElapsed && adminToken != null
     fun isActivated(context: Context): Boolean =
@@ -193,7 +204,7 @@ object CxWorkerActivation {
         }
     }
 
-    /** Call on app cold start, onResume, before provider load/player, and every 60s. */
+    /** Call on app cold start, before provider load/player, and before the lease ends (see needsRenewal). */
     suspend fun validateOnline(context: Context): Boolean = withContext(Dispatchers.IO) {
         var stage="verify_challenge"
         try {
@@ -211,12 +222,12 @@ object CxWorkerActivation {
                 .put("challenge_id",challengeId)
                 .put("signature",proof)
                 .put("signature_scheme",SIGNATURE_SCHEME))
-            if(!valid.optBoolean("authorized",false)){
+            if(!valid.optBoolean("authorized",false) || valid.optString("device_id")!=deviceId){
                 lastProblem="verify_server:NOT_AUTHORIZED"
                 return@withContext failClosed()
             }
             // A verified state is intentionally process-local and short-lived.
-            checkedUntilElapsed=SystemClock.elapsedRealtime()+59_000L
+            checkedUntilElapsed=SystemClock.elapsedRealtime()+leaseMillis(valid)
             lastProblem="none"
             true
         } catch(e:Exception) {
