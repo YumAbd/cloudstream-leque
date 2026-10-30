@@ -127,7 +127,8 @@ class CxActivationActivity : AppCompatActivity() {
             if(ok)enterApp()
             else {
                 setBusy(false)
-                status.text="Unable to verify this device. Check Internet access. If revoked, contact the license owner."
+                status.text="Online verification failed ("+CxWorkerActivation.lastActivationProblem()+
+                    "). Check connection, or ask owner to reset/reissue a PIN."
             }
         }
     }
@@ -146,7 +147,12 @@ class CxActivationActivity : AppCompatActivity() {
             else {
                 setBusy(false)
                 render()
-                status.text="Activation failed. Check the PIN and Internet, or request a new PIN from the owner."
+                status.text=if(CxWorkerActivation.isActivated(this@CxActivationActivity))
+                    "Device was REGISTERED, but online recheck failed ("+
+                        CxWorkerActivation.lastActivationProblem()+
+                        "). Do NOT request another PIN. Tap Retry online verification."
+                else "Activation not completed ("+CxWorkerActivation.lastActivationProblem()+
+                    "). Check the PIN, Internet and error code, or contact the owner."
             }
         }
     }

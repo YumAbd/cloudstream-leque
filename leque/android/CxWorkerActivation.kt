@@ -12,13 +12,16 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.URL
+import java.net.UnknownHostException
+import java.net.SocketTimeoutException
+import java.net.ConnectException
+import javax.net.ssl.SSLException
+import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.Signature
-import java.security.spec.MGF1ParameterSpec
 import javax.net.ssl.HttpsURLConnection
-import java.security.spec.PSSParameterSpec
 
 /**
  * Cloudflare Worker activation protocol v1. Keystore private key never leaves Android.
@@ -26,7 +29,8 @@ import java.security.spec.PSSParameterSpec
  * All network calls must run off the UI thread; all failures fail closed.
  */
 object CxWorkerActivation {
-    private const val ALIAS = "cx_device_rsa_pss_2026_v1"
+    private const val ALIAS = "cx_device_rsa_pkcs1_2026_v2"
+    private const val SIGNATURE_SCHEME = "rsa-pkcs1-sha256"
     private const val PREFS = "cx_worker_activation_2026_v1"
     private const val DEVICE_ID = "device_id"
     private const val MAX_RESPONSE = 16384
@@ -36,6 +40,25 @@ object CxWorkerActivation {
     @Volatile private var checkedUntilElapsed: Long = 0L
     @Volatile private var adminUntilElapsed: Long = 0L
     @Volatile private var adminToken: String? = null
+    @Volatile private var lastProblem: String = "not_checked"
+
+    fun lastActivationProblem(): String = lastProblem
+
+    private class ApiProblem(val status: Int,val code:String) : IOException("server_error")
+    private fun recordProblem(stage:String,e:Exception){
+        // Never include PINs, request bodies, private keys or tokens in logs.
+        val kind=when(e){
+            is ApiProblem -> "HTTP_${e.status}_${e.code}"
+            is UnknownHostException -> "DNS_UNREACHABLE"
+            is SocketTimeoutException -> "NETWORK_TIMEOUT"
+            is ConnectException -> "CONNECTION_FAILED"
+            is SSLException -> "TLS_ERROR"
+            is java.security.GeneralSecurityException -> "KEYSTORE_${e.javaClass.simpleName}"
+            else -> e.javaClass.simpleName.take(48)
+        }
+        lastProblem=stage+":"+kind
+        android.util.Log.w("CxDeviceActivation","Failed "+stage+" ("+kind+")")
+    }
 
     fun hasFreshCheck(): Boolean = SystemClock.elapsedRealtime() < checkedUntilElapsed
     fun hasAdminAccess(): Boolean = hasFreshCheck() &&
@@ -67,22 +90,36 @@ object CxWorkerActivation {
         if (!store.containsAlias(ALIAS)) {
             val generator=KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA,"AndroidKeyStore")
             generator.initialize(KeyGenParameterSpec.Builder(
-                ALIAS, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+                ALIAS, KeyProperties.PURPOSE_SIGN
             ).setKeySize(2048).setDigests(KeyProperties.DIGEST_SHA256)
-                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PSS).build())
+                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1).build())
             generator.generateKeyPair()
         }
         return store.getEntry(ALIAS,null) as KeyStore.PrivateKeyEntry
     }
 
     private fun sign(message: String): String {
-        val signature=Signature.getInstance("SHA256withRSA/PSS")
+        // Android 8 KeyStore reliably supports PKCS#1 v1.5 SHA-256.
+        // A new key alias prevents accidental reuse of a PSS-only key.
+        val signature=Signature.getInstance("SHA256withRSA")
         signature.initSign(signingKey().privateKey)
-        signature.setParameter(PSSParameterSpec(
-            "SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1
-        ))
         signature.update(message.toByteArray(StandardCharsets.UTF_8))
         return b64url(signature.sign())
+    }
+
+    /** Real Android 8 instrumentation calls this without reaching Cloudflare. */
+    fun selfTestDeviceProof(): Boolean {
+        val message="CX-SELFTEST\\n".replace("\\\\n","\\n")+System.nanoTime()
+        return try {
+            val proof=Base64.decode(sign(message),Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
+            val verifier=Signature.getInstance("SHA256withRSA")
+            verifier.initVerify(signingKey().certificate.publicKey)
+            verifier.update(message.toByteArray(StandardCharsets.UTF_8))
+            verifier.verify(proof)
+        }catch(e:Exception){
+            recordProblem("keystore_selftest",e)
+            false
+        }
     }
 
     private fun post(path: String, data: JSONObject, bearer: String? = null): JSONObject =
@@ -101,43 +138,56 @@ object CxWorkerActivation {
         try {
             if(data!=null)connection.outputStream.use { it.write(data.toString().toByteArray(StandardCharsets.UTF_8)) }
             val responseCode=connection.responseCode
-            if(responseCode !in 200..299)throw IllegalStateException("Activation rejected: $responseCode")
             val size=connection.contentLength
-            if(size>MAX_RESPONSE)throw IllegalStateException("Response too large")
-            val bytes=connection.inputStream.use { input ->
+            if(size>MAX_RESPONSE)throw IOException("response_too_large")
+            val input=if(responseCode in 200..299)connection.inputStream else connection.errorStream
+            val bytes=input?.use { stream ->
                 val out=ByteArrayOutputStream()
                 val chunk=ByteArray(2048)
                 while(true) {
-                    val sizeRead=input.read(chunk)
+                    val sizeRead=stream.read(chunk)
                     if(sizeRead<0)break
                     out.write(chunk,0,sizeRead)
-                    if(out.size()>MAX_RESPONSE)throw IllegalStateException("Response too large")
+                    if(out.size()>MAX_RESPONSE)throw IOException("response_too_large")
                 }
                 out.toByteArray()
+            }?:ByteArray(0)
+            val body=runCatching{JSONObject(String(bytes,StandardCharsets.UTF_8))}.getOrElse{JSONObject()}
+            if(responseCode !in 200..299){
+                val error=body.optString("error","unknown").take(60)
+                    .takeIf{Regex("^[a-z0-9_]+$").matches(it)}?:"unknown"
+                throw ApiProblem(responseCode,error)
             }
-            return JSONObject(String(bytes,StandardCharsets.UTF_8))
+            return body
         } finally { connection.disconnect() }
     }
 
     /** Use once on initial install, then call validateOnline before opening Home. */
     suspend fun activate(context: Context, pin: String): Boolean = withContext(Dispatchers.IO) {
+        var stage="challenge"
         try {
+            lastProblem="none"
             val challenge=post("/api/device/challenge",JSONObject().put("purpose","activate"))
             val challengeId=challenge.getString("challenge_id")
             val nonce=challenge.getString("nonce")
+            stage="keystore_sign"
             val proof=sign("CX-ACTIVATE\n$challengeId\n$nonce")
             val publicKey=b64url(signingKey().certificate.publicKey.encoded)
+            stage="register_device"
             val response=post("/api/device/activate",JSONObject()
                 .put("challenge_id",challengeId)
                 .put("public_key_spki",publicKey)
                 .put("signature",proof)
+                .put("signature_scheme",SIGNATURE_SCHEME)
                 .put("pin",pin))
             val deviceId=response.getString("device_id")
             // Only a public identifier is persisted; no static device or admin bearer token.
             context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
                 .edit().putString(DEVICE_ID,deviceId).apply()
+            stage="verify_registered_device"
             return@withContext validateOnline(context)
-        } catch (_: Exception) {
+        } catch(e:Exception) {
+            recordProblem(stage,e)
             checkedUntilElapsed=0L
             false
         }
@@ -145,6 +195,7 @@ object CxWorkerActivation {
 
     /** Call on app cold start, onResume, before provider load/player, and every 60s. */
     suspend fun validateOnline(context: Context): Boolean = withContext(Dispatchers.IO) {
+        var stage="verify_challenge"
         try {
             val deviceId=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
                 .getString(DEVICE_ID,null) ?: return@withContext failClosed()
@@ -152,16 +203,26 @@ object CxWorkerActivation {
                 .put("purpose","verify").put("device_id",deviceId))
             val challengeId=challenge.getString("challenge_id")
             val nonce=challenge.getString("nonce")
+            stage="verify_keystore_sign"
             val proof=sign("CX-VERIFY\n$deviceId\n$challengeId\n$nonce")
+            stage="verify_server"
             val valid=post("/api/device/verify",JSONObject()
                 .put("device_id",deviceId)
                 .put("challenge_id",challengeId)
-                .put("signature",proof))
-            if(!valid.optBoolean("authorized",false))return@withContext failClosed()
+                .put("signature",proof)
+                .put("signature_scheme",SIGNATURE_SCHEME))
+            if(!valid.optBoolean("authorized",false)){
+                lastProblem="verify_server:NOT_AUTHORIZED"
+                return@withContext failClosed()
+            }
             // A verified state is intentionally process-local and short-lived.
             checkedUntilElapsed=SystemClock.elapsedRealtime()+59_000L
+            lastProblem="none"
             true
-        } catch (_: Exception) {failClosed()}
+        } catch(e:Exception) {
+            recordProblem(stage,e)
+            failClosed()
+        }
     }
 
     private fun failClosed(): Boolean {
@@ -185,7 +246,8 @@ object CxWorkerActivation {
             val result=post("/api/mobile-admin/login",JSONObject()
                 .put("username",username).put("password",password).put("totp",totp)
                 .put("device_id",deviceId).put("challenge_id",challengeId)
-                .put("signature",proof))
+                .put("signature",proof)
+                .put("signature_scheme",SIGNATURE_SCHEME))
             val token=result.getString("access_token")
             adminToken=token
             return@withContext refreshAdminStatus()
