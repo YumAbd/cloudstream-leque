@@ -3,6 +3,6 @@
   "description": "Curated test repository for CloudXtream by Leque 5.0.3",
   "manifestVersion": 1,
   "pluginLists": [
-    "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"
+    "https://cloudxpanel.infopc.xyz/catalog/sumber.json"
   ]
 }
