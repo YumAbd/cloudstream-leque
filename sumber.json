@@ -670,7 +670,7 @@
     "fileHash": "sha256-ef4f7be886ecceaf084c1328541c7fd3f020bd3da5e3f2bdbe6f127ec0e56b1c"
   },
   {
-    "url": "https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/MissAv.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/MissAv-a00445b24701.cs3",
     "status": 1,
     "version": 11,
     "name": "MissAv",
@@ -690,7 +690,7 @@
     "fileHash": "sha256-a00445b24701ace61e1efb2cf387c45cd4e11e13618bc6e4500bfb4d09cb5649"
   },
   {
-    "url": "https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/Sflix.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Sflix-e43429071f39.cs3",
     "status": 1,
     "version": 3,
     "name": "Sflix",
