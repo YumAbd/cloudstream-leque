@@ -32,7 +32,7 @@ jobs:
 
           def check(plugin):
               name, url = plugin["internalName"], plugin["url"]
-              if not url.startswith("https://raw.githubusercontent.com/") or not url.endswith(".cs3"):
+              if not url.startswith(("https://raw.githubusercontent.com/", "https://gitlab.com/")) or not url.endswith(".cs3"):
                   return name, "unsupported URL"
               if url.startswith(ours) and not Path("plugins", url[len(ours):]).is_file():
                   return name, "copied file missing from plugins/"
