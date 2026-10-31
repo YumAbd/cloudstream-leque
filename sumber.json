@@ -73,7 +73,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "CineMax21 — Streaming Movie and TV Series",
+    "description": "CineMax21 \u2014 Streaming Movie and TV Series",
     "fileSize": 241044,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -185,7 +185,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "Dubbindo — status terbatas: provider masih dapat memuat sebagian link, tetapi banyak konten di website sumber sedang processing/mati, poster kosong, atau media tidak dapat diputar.",
+    "description": "Dubbindo \u2014 status terbatas: provider masih dapat memuat sebagian link, tetapi banyak konten di website sumber sedang processing/mati, poster kosong, atau media tidak dapat diputar.",
     "fileSize": 35566,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -231,7 +231,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "HidoriStream — Streaming Anime Subtitle Indonesia",
+    "description": "HidoriStream \u2014 Streaming Anime Subtitle Indonesia",
     "fileSize": 58969,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -342,7 +342,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "Kuronime — Streaming Anime Subtitle Indonesia",
+    "description": "Kuronime \u2014 Streaming Anime Subtitle Indonesia",
     "fileSize": 39462,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -509,7 +509,7 @@
     "version": 1,
     "name": "Pencurimovie",
     "internalName": "Pencurimovie",
-    "description": "📺 Streaming Movie and TV Series",
+    "description": "\ud83d\udcfa Streaming Movie and TV Series",
     "authors": [
       "Phisher98",
       "Asm0d3usX"
@@ -552,7 +552,7 @@
     "version": 1,
     "name": "Dutamovie",
     "internalName": "Dutamovie",
-    "description": "📺 Streaming Movie and TV Series",
+    "description": "\ud83d\udcfa Streaming Movie and TV Series",
     "authors": [
       "Hexated",
       "Asm0d3usX"
@@ -574,7 +574,7 @@
     "version": 1,
     "name": "Indomax",
     "internalName": "Indomax",
-    "description": "📺 Streaming Movie and TV Series",
+    "description": "\ud83d\udcfa Streaming Movie and TV Series",
     "authors": [
       "Asm0d3usX"
     ],
@@ -595,7 +595,7 @@
     "version": 1,
     "name": "Ngefilm",
     "internalName": "Ngefilm",
-    "description": "📺 Streaming Movie and TV Series",
+    "description": "\ud83d\udcfa Streaming Movie and TV Series",
     "authors": [
       "Asm0d3usX"
     ],
@@ -609,25 +609,6 @@
     "iconUrl": "https://i.ibb.co.com/3yVG0DbY/ngefilm.png",
     "apiVersion": 1,
     "fileHash": "sha256-4641795e14b16d53e1c9dc1ffe7d369d84757cb0e886c090b33b47da3d204d0d"
-  },
-  {
-    "iconUrl": "https://www.shutterstock.com/image-vector/iptv-vector-line-icon-ip-260nw-1841427610.jpg",
-    "apiVersion": 1,
-    "repositoryUrl": "https://gitlab.com/tearrs/cloudstream-vietnamese",
-    "fileSize": 32311,
-    "status": 1,
-    "authors": [
-      "anhdaden"
-    ],
-    "tvTypes": [
-      "Live"
-    ],
-    "version": 9,
-    "internalName": "IPTVProvider",
-    "description": "Cần nhập link IPTV để xem",
-    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/IPTVProvider-8760295a88dd.cs3",
-    "name": "IPTVProvider",
-    "fileHash": "sha256-8760295a88dd29011add8fa04e542209412100631dee948c18559e9e1acc565a"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pornhub-f3047e694291.cs3",
