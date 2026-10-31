@@ -1,4 +1,4 @@
-name: Build CloudXtream V5.0.13 Activation Fix Preview APK
+name: Build CloudXtream V5.0.14 Activation Fix Preview APK
 run-name: CloudXtream preview ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
@@ -102,6 +102,7 @@ jobs:
           python3 leque/settings_cleanup_v5011.py upstream
           python3 leque/update_notify_v5012.py upstream
           python3 leque/update_progress_v5013.py upstream
+          python3 leque/features_v5014.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           git -C upstream diff --check
@@ -121,7 +122,7 @@ jobs:
           mkdir -p out
           find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk \;
           test -s out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
-          git -C upstream diff --binary > out/CloudXtream-V5.0.13-ActivationFixPreview-source.patch
+          git -C upstream diff --binary > out/CloudXtream-V5.0.14-ActivationFixPreview-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
           sha256sum out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt

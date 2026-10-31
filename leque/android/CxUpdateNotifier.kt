@@ -1,5 +1,6 @@
 // CloudXtream: background check of the CloudXtream release feed; posts a notification once per
 // new version. Tapping it opens the app, whose update prompt downloads and installs the APK.
+// Also reminds the user once a day when the license expires within 3 days.
 package com.lagradost.cloudstream3.services
 
 import android.Manifest
@@ -20,6 +21,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.activation.CxWorkerActivation
 import com.lagradost.cloudstream3.utils.AppContextUtils.createNotificationChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +38,9 @@ class CxUpdateNotifier(val context: Context, params: WorkerParameters) :
         private const val CHANNEL_ID = "cloudxtream.app_updates"
         private const val NOTIFICATION_ID = 50_011_001
         private const val NOTIFIED_KEY = "cx_update_notified_version"
+        private const val EXPIRY_NOTIFICATION_ID = 50_014_001
+        private const val EXPIRY_NOTIFIED_DAY = "cx_expiry_notified_day"
+        private const val DAY_MS = 86_400_000L
 
         /** Hourly while online; WorkManager keeps the schedule across restarts and reboots. */
         fun schedule(context: Context) {
@@ -62,13 +67,55 @@ class CxUpdateNotifier(val context: Context, params: WorkerParameters) :
                 }
     }
 
+    private fun post(id: Int, title: String, text: String) {
+        context.createNotificationChannel(
+            CHANNEL_ID, context.getString(R.string.cx_notify_channel), context.getString(R.string.cx_notify_channel_des)
+        )
+        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_cloudstream_monochrome_big)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .apply {
+                open?.let {
+                    setContentIntent(
+                        PendingIntentCompat.getActivity(
+                            context, id, it, PendingIntent.FLAG_UPDATE_CURRENT, false
+                        )
+                    )
+                }
+            }
+            .build()
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(id, notification)
+    }
+
+    private fun remindExpiry(prefs: android.content.SharedPreferences) {
+        val expires = CxWorkerActivation.licenseExpiresMs(context) ?: return
+        val left = expires - System.currentTimeMillis()
+        if (left <= 0L || left > 3 * DAY_MS) return
+        val today = System.currentTimeMillis() / DAY_MS
+        if (prefs.getLong(EXPIRY_NOTIFIED_DAY, -1L) == today) return
+        val days = ((left + DAY_MS - 1) / DAY_MS).toInt()
+        post(
+            EXPIRY_NOTIFICATION_ID,
+            context.getString(R.string.cx_expiry_title),
+            context.resources.getQuantityString(R.plurals.cx_expiry_text, days, days)
+        )
+        prefs.edit().putLong(EXPIRY_NOTIFIED_DAY, today).apply()
+    }
+
     override suspend fun doWork(): Result {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        // Same switch as the update prompt (Settings > Updates > Show app updates).
-        if (!prefs.getBoolean(context.getString(R.string.auto_update_key), true)) return Result.success()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return Result.success()
+        remindExpiry(prefs)
+        // Same switch as the update prompt (Settings > Updates > Show app updates).
+        if (!prefs.getBoolean(context.getString(R.string.auto_update_key), true)) return Result.success()
 
         val feed = try {
             withContext(Dispatchers.IO) {
@@ -97,29 +144,11 @@ class CxUpdateNotifier(val context: Context, params: WorkerParameters) :
         }
         if (prefs.getString(NOTIFIED_KEY, null) == remote) return Result.success()
 
-        context.createNotificationChannel(
-            CHANNEL_ID, "App updates", "New CloudXtream versions"
+        post(
+            NOTIFICATION_ID,
+            context.getString(R.string.cx_update_title),
+            context.getString(R.string.cx_update_text, remote)
         )
-        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_cloudstream_monochrome_big)
-            .setContentTitle("CloudXtream update available")
-            .setContentText("Version $remote is ready. Tap to update.")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .apply {
-                open?.let {
-                    setContentIntent(
-                        PendingIntentCompat.getActivity(
-                            context, 0, it, PendingIntent.FLAG_UPDATE_CURRENT, false
-                        )
-                    )
-                }
-            }
-            .build()
-        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIFICATION_ID, notification)
         prefs.edit().putString(NOTIFIED_KEY, remote).apply()
         return Result.success()
     }

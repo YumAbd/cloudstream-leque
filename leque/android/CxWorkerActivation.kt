@@ -36,6 +36,7 @@ object CxWorkerActivation {
     private const val PREFS = "cx_worker_activation_2026_v1"
     private const val DEVICE_ID = "device_id"
     private const val PROFILE_NAME_APPLIED = "profile_name_applied"
+    private const val LICENSE_EXPIRES = "license_expires_ms"
     private const val MAX_RESPONSE = 16384
     // Server lease (revalidate_in) is clamped locally so a bad response cannot extend it.
     private const val MIN_LEASE_SECONDS = 30L
@@ -261,6 +262,10 @@ object CxWorkerActivation {
             // A verified state is intentionally process-local and short-lived.
             checkedUntilElapsed=SystemClock.elapsedRealtime()+leaseMillis(valid)
             applyProfileName(context,valid.optString("display_name",""))
+            // Last known license expiry (none = -1), used for the reminder notification.
+            context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
+                .putLong(LICENSE_EXPIRES,if(valid.isNull("license_expires_ms"))-1L else valid.optLong("license_expires_ms",-1L))
+                .apply()
             lastProblem="none"
             true
         } catch(e:Exception) {
@@ -268,6 +273,33 @@ object CxWorkerActivation {
             failClosed()
         }
     }
+
+    /** License expiry from the last successful online check, or null when it never expires. */
+    fun licenseExpiresMs(context: Context): Long? =
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getLong(LICENSE_EXPIRES,-1L).takeIf { it > 0L }
+
+    /** "Report a problem" from the player; signed by this device like an online check. */
+    suspend fun reportProblem(context: Context, title: String, source: String, detail: String, appVersion: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val deviceId=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+                    .getString(DEVICE_ID,null) ?: return@withContext false
+                val challenge=post("/api/device/challenge",JSONObject()
+                    .put("purpose","verify").put("device_id",deviceId))
+                val challengeId=challenge.getString("challenge_id")
+                val nonce=challenge.getString("nonce")
+                val proof=sign("CX-VERIFY\n$deviceId\n$challengeId\n$nonce")
+                post("/api/device/report",JSONObject()
+                    .put("device_id",deviceId).put("challenge_id",challengeId)
+                    .put("signature",proof).put("signature_scheme",SIGNATURE_SCHEME)
+                    .put("title",title.take(200)).put("source",source.take(200))
+                    .put("detail",detail.take(500)).put("app_version",appVersion.take(20)))
+                    .optBoolean("ok",false)
+            } catch(e:Exception) {
+                recordProblem("report",e)
+                false
+            }
+        }
 
     private fun failClosed(): Boolean {
         checkedUntilElapsed=0L

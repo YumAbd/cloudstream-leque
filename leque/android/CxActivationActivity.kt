@@ -65,11 +65,11 @@ class CxActivationActivity : AppCompatActivity() {
         }
         root.addView(caption("CLOUDXTREAM",29f,Color.rgb(0,204,239)))
         root.addView(caption("by Leque",16f,Color.LTGRAY))
-        root.addView(caption("One license. One registered device.\nAn Internet connection is required to use this app.",15f,Color.WHITE))
-        status=caption("Checking activation…",14f,Color.rgb(175,209,227))
+        root.addView(caption("Aplikasi ini perlu diaktifkan dengan PIN daripada pemilik lesen.\nSambungan Internet diperlukan.",15f,Color.WHITE))
+        status=caption("Menyemak pengaktifan…",14f,Color.rgb(175,209,227))
         root.addView(status)
         pin=EditText(this).apply {
-            hint="6-character activation PIN"
+            hint="PIN pengaktifan (6 aksara)"
             setSingleLine(true)
             gravity=Gravity.CENTER
             textSize=22f
@@ -82,12 +82,12 @@ class CxActivationActivity : AppCompatActivity() {
             setSelectAllOnFocus(true)
         }
         root.addView(pin,LinearLayout.LayoutParams(-1,dp(60)))
-        submit=button("Activate device").also { root.addView(it,LinearLayout.LayoutParams(-1,dp(58))) }
-        retry=button("Retry online verification").also { root.addView(it,LinearLayout.LayoutParams(-1,dp(58))) }
-        changeDevice=button("I have a new PIN (after owner reset)").also {
+        submit=button("Aktifkan peranti").also { root.addView(it,LinearLayout.LayoutParams(-1,dp(58))) }
+        retry=button("Cuba semak semula").also { root.addView(it,LinearLayout.LayoutParams(-1,dp(58))) }
+        changeDevice=button("Saya ada PIN baharu").also {
             root.addView(it,LinearLayout.LayoutParams(-1,dp(56)))
         }
-        val spacer=caption("Activation PIN expires after 24 hours.\nContact the license owner if your device needs a reset.",12f,Color.LTGRAY)
+        val spacer=caption("PIN ada tempoh sah yang ditetapkan oleh pemilik.\nHubungi pemilik lesen jika peranti perlu ditetapkan semula.",12f,Color.LTGRAY)
         root.addView(spacer)
         outer.addView(root)
         setContentView(outer)
@@ -97,7 +97,7 @@ class CxActivationActivity : AppCompatActivity() {
         changeDevice.setOnClickListener {
             CxWorkerActivation.clearStoredDeviceIdForReactivation(this)
             render()
-            status.text="Enter a NEW PIN issued after the previous device was reset by the owner."
+            status.text="Masukkan PIN BAHARU yang diberi oleh pemilik."
         }
         render()
         if(CxWorkerActivation.isActivated(this))verifyExisting()
@@ -109,7 +109,7 @@ class CxActivationActivity : AppCompatActivity() {
         submit.visibility=if(already)View.GONE else View.VISIBLE
         retry.visibility=if(already)View.VISIBLE else View.GONE
         changeDevice.visibility=if(already)View.VISIBLE else View.GONE
-        if(!already)status.text="Enter the one-time PIN provided by the owner."
+        if(!already)status.text="Masukkan PIN yang diberi oleh pemilik lesen."
     }
     private fun setBusy(value:Boolean){
         busy=value
@@ -121,14 +121,17 @@ class CxActivationActivity : AppCompatActivity() {
     private fun verifyExisting(){
         if(busy)return
         setBusy(true)
-        status.text="Checking your device with CloudXtream Control…"
+        status.text="Menyemak peranti anda dengan CloudXtream…"
         lifecycleScope.launch {
             val ok=CxWorkerActivation.validateOnline(this@CxActivationActivity)
             if(ok)enterApp()
             else {
                 setBusy(false)
-                status.text="Online verification failed ("+CxWorkerActivation.lastActivationProblem()+
-                    "). Check connection, or ask owner to reset/reissue a PIN."
+                val expired=CxWorkerActivation.licenseExpiresMs(this@CxActivationActivity)
+                    ?.let { it<=System.currentTimeMillis() }==true
+                status.text=if(expired)"Lesen anda telah tamat tempoh. Hubungi pemilik lesen untuk menyambungnya, kemudian tekan Cuba semak semula."
+                    else "Semakan dalam talian gagal ("+CxWorkerActivation.lastActivationProblem()+
+                    "). Semak Internet, atau minta pemilik beri PIN baharu."
             }
         }
     }
@@ -136,11 +139,11 @@ class CxActivationActivity : AppCompatActivity() {
         if(busy)return
         val code=pin.text.toString().trim().uppercase(Locale.ROOT)
         if(!Regex("^[A-Z2-7]{6}$").matches(code)){
-            status.text="Enter exactly 6 uppercase letters/numbers (A–Z and 2–7)."
+            status.text="Masukkan tepat 6 aksara (huruf A–Z dan nombor 2–7)."
             return
         }
         setBusy(true)
-        status.text="Activating securely. Please keep Internet connected…"
+        status.text="Sedang mengaktifkan. Pastikan Internet bersambung…"
         lifecycleScope.launch {
             val ok=CxWorkerActivation.activate(this@CxActivationActivity,code)
             if(ok)enterApp()
@@ -148,11 +151,11 @@ class CxActivationActivity : AppCompatActivity() {
                 setBusy(false)
                 render()
                 status.text=if(CxWorkerActivation.isActivated(this@CxActivationActivity))
-                    "Device was REGISTERED, but online recheck failed ("+
+                    "Peranti TELAH didaftarkan, tetapi semakan semula gagal ("+
                         CxWorkerActivation.lastActivationProblem()+
-                        "). Do NOT request another PIN. Tap Retry online verification."
-                else "Activation not completed ("+CxWorkerActivation.lastActivationProblem()+
-                    "). Check the PIN, Internet and error code, or contact the owner."
+                        "). JANGAN minta PIN lain. Tekan Cuba semak semula."
+                else "Pengaktifan tidak berjaya ("+CxWorkerActivation.lastActivationProblem()+
+                    "). Semak PIN dan Internet, atau hubungi pemilik."
             }
         }
     }
