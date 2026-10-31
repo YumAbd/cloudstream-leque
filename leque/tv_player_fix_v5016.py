@@ -38,6 +38,11 @@ if port.exists(): phone&=ids(port.read_text(encoding="utf8"))  # views not in ev
 missing=sorted(phone-ids(files[tv]))
 if missing: sys.exit("FAIL: V5.0.16 views missing from the TV player layout: "+", ".join(missing))
 
+# Instrumentation test (run on the Android 8 emulator): binds the phone and TV player layouts.
+test="app/src/androidTest/java/com/lagradost/cloudstream3/CxLayoutTest.kt"
+if (ROOT/test).exists(): sys.exit("FAIL: duplicate CxLayoutTest")
+files[test]=(Path(__file__).resolve().parent/"androidTest"/"CxLayoutTest.kt").read_text(encoding="utf8")
+
 for path,source in files.items():
     (ROOT/path).write_text(source,encoding="utf8")
 print("PASS: V5.0.16 TV player layout has the More button",len(files),"files")
