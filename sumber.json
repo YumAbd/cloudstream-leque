@@ -441,7 +441,7 @@
     "fileHash": "sha256-596cda263feeef775548970606bfbc4f61c49fe08025e19588551989c61cc86c"
   },
   {
-    "url": "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/builds/LayarKacaProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/LayarKacaProvider-db0c8643377a.cs3",
     "status": 1,
     "version": 10,
     "name": "LayarKacaProvider",
@@ -462,7 +462,7 @@
     "fileHash": "sha256-db0c8643377a03fbed0c7553fb93e863f3f170e06c8cfec348f5ce989c8c3b93"
   },
   {
-    "url": "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/builds/MovieBoxProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/MovieBoxProvider-7fc9c67543a6.cs3",
     "status": 1,
     "version": 40,
     "name": "MovieBoxProvider",
@@ -483,7 +483,7 @@
     "fileHash": "sha256-7fc9c67543a684dded6a0291ce2cf758cd414917fda44575a8b23d0ed5431ec1"
   },
   {
-    "url": "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/builds/Animekhor.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Animekhor-5822fff54a3d.cs3",
     "status": 1,
     "version": 13,
     "name": "Animekhor",
@@ -504,7 +504,7 @@
     "fileHash": "sha256-5822fff54a3d61af1013ccd5271f929a3d4f663ec7ff35e41f671c3102c1f25a"
   },
   {
-    "url": "https://raw.githubusercontent.com/Asm0d3usX/CloudX/builds/Pencurimovie.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pencurimovie-21060e44e733.cs3",
     "status": 1,
     "version": 1,
     "name": "Pencurimovie",
@@ -526,7 +526,7 @@
     "fileHash": "sha256-21060e44e73398f189700f39d02fe238228a7c678a5732fd6f0171cea5ddef87"
   },
   {
-    "url": "https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pmsm-d145f3183448.cs3",
     "status": 1,
     "version": 4,
     "name": "Pmsm",
@@ -547,7 +547,7 @@
     "fileHash": "sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
   },
   {
-    "url": "https://raw.githubusercontent.com/Asm0d3usX/CloudX/builds/Dutamovie.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Dutamovie-602e9e7655cd.cs3",
     "status": 1,
     "version": 1,
     "name": "Dutamovie",
@@ -565,10 +565,11 @@
       "TvSeries"
     ],
     "iconUrl": "https://i.ibb.co.com/SwTXWck9/dutamovie.png",
-    "apiVersion": 1
+    "apiVersion": 1,
+    "fileHash": "sha256-602e9e7655cddf7ba9e2c5f61b4741920daec20bed2df3d770276fabd215da0c"
   },
   {
-    "url": "https://raw.githubusercontent.com/Asm0d3usX/CloudX/builds/Indomax.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Indomax-f5b4f2e37048.cs3",
     "status": 1,
     "version": 1,
     "name": "Indomax",
@@ -585,10 +586,11 @@
       "TvSeries"
     ],
     "iconUrl": "https://i.ibb.co.com/6cCQ1h87/indomax.jpg",
-    "apiVersion": 1
+    "apiVersion": 1,
+    "fileHash": "sha256-f5b4f2e370485114cf775a6e0a21de3f53d3a6d3d177457222194590c1c66d54"
   },
   {
-    "url": "https://raw.githubusercontent.com/Asm0d3usX/CloudX/builds/Ngefilm.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Ngefilm-4641795e14b1.cs3",
     "status": 1,
     "version": 1,
     "name": "Ngefilm",
@@ -605,7 +607,8 @@
       "TvSeries"
     ],
     "iconUrl": "https://i.ibb.co.com/3yVG0DbY/ngefilm.png",
-    "apiVersion": 1
+    "apiVersion": 1,
+    "fileHash": "sha256-4641795e14b16d53e1c9dc1ffe7d369d84757cb0e886c090b33b47da3d204d0d"
   },
   {
     "iconUrl": "https://www.shutterstock.com/image-vector/iptv-vector-line-icon-ip-260nw-1841427610.jpg",
@@ -627,7 +630,7 @@
     "fileHash": "sha256-8760295a88dd29011add8fa04e542209412100631dee948c18559e9e1acc565a"
   },
   {
-    "url": "https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/Pornhub.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pornhub-f3047e694291.cs3",
     "status": 1,
     "version": 10,
     "name": "Pornhub",
@@ -647,7 +650,7 @@
     "fileHash": "sha256-f3047e694291da1f0efd21af5871abf07656fef4796eedadd15696fc72cdd081"
   },
   {
-    "url": "https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/JavHey.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/JavHey-ef4f7be886ec.cs3",
     "status": 1,
     "version": 10,
     "name": "JavHey",
