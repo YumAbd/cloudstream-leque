@@ -1,0 +1,74 @@
+name: Verify CloudXtream extension catalog
+on:
+  push:
+    branches: [apk-build]
+    paths:
+      - 'sumber.json'
+      - 'plugins/**'
+      - '.github/workflows/leque-verify-catalog.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Every catalog entry downloads and matches its size and SHA-256
+        run: |
+          python3 - <<'PY'
+          import hashlib, io, json, time, urllib.request, zipfile
+          from concurrent.futures import ThreadPoolExecutor
+          from pathlib import Path
+
+          index = json.loads(Path("sumber.json").read_text(encoding="utf-8"))
+          assert isinstance(index, list) and 0 < len(index) <= 100, "catalog must hold 1-100 entries (app limit)"
+          names = [p.get("internalName") for p in index]
+          assert len(set(names)) == len(names), "duplicate internalName"
+          ours = "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/"
+
+          def check(plugin):
+              name, url = plugin["internalName"], plugin["url"]
+              if not url.startswith("https://raw.githubusercontent.com/") or not url.endswith(".cs3"):
+                  return name, "unsupported URL"
+              if url.startswith(ours) and not Path("plugins", url[len(ours):]).is_file():
+                  return name, "copied file missing from plugins/"
+              for attempt in range(3):
+                  try:
+                      request = urllib.request.Request(url, headers={"User-Agent": "CloudXtream-Catalog-Check/1.0"})
+                      with urllib.request.urlopen(request, timeout=45) as response:
+                          binary = response.read(5_000_001)
+                      break
+                  except Exception as e:
+                      error = str(e)
+                      time.sleep(5 * (attempt + 1))
+              else:
+                  return name, "download failed: " + error[:80]
+              if plugin.get("fileSize") and len(binary) != plugin["fileSize"]:
+                  return name, f"size {len(binary)} != {plugin['fileSize']}"
+              actual = "sha256-" + hashlib.sha256(binary).hexdigest()
+              if plugin.get("fileHash") and actual != plugin["fileHash"]:
+                  return name, "SHA-256 differs from the catalog"
+              try:
+                  with zipfile.ZipFile(io.BytesIO(binary)) as archive:
+                      members = archive.namelist()
+                      if archive.testzip() is not None or "manifest.json" not in members or not any(m.endswith(".dex") for m in members):
+                          return name, "not a valid extension archive"
+              except zipfile.BadZipFile:
+                  return name, "not a zip archive"
+              return name, None
+
+          with ThreadPoolExecutor(8) as pool:
+              results = list(pool.map(check, index))
+          failed = [(n, why) for n, why in results if why]
+          copied = sum(p["url"].startswith(ours) for p in index)
+          print(f"{len(index)} entries ({sum(p.get('status') == 1 for p in index)} active, {copied} copied into this repository)")
+          for n, why in failed:
+              print(f"::error title={n}::{why}")
+          if failed:
+              raise SystemExit(f"{len(failed)} extension(s) failed: " + ", ".join(n for n, _ in failed))
+          print("PASS: every extension archive matches its catalog size and SHA-256. Playback is not tested here.")
+          PY
