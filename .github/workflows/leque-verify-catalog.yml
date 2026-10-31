@@ -72,3 +72,20 @@ jobs:
               raise SystemExit(f"{len(failed)} extension(s) failed: " + ", ".join(n for n, _ in failed))
           print("PASS: every extension archive matches its catalog size and SHA-256. Playback is not tested here.")
           PY
+      - name: The app catalog feed on the Worker serves this catalog
+        run: |
+          python3 - <<'PY'
+          import json, time, urllib.request
+          from pathlib import Path
+          expected = sorted(p["internalName"] for p in json.loads(Path("sumber.json").read_text(encoding="utf-8")))
+          for attempt in range(6):
+              request = urllib.request.Request("https://cloudxpanel.infopc.xyz/catalog/sumber.json", headers={"User-Agent": "CloudXtream-Catalog-Check/1.0"})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  served = sorted(p["internalName"] for p in json.load(response))
+              if served == expected:
+                  print(f"PASS: the Worker feed serves the same {len(served)} extensions")
+                  break
+              time.sleep(20)  # the feed caches for up to 60 seconds
+          else:
+              raise SystemExit(f"Worker feed differs: missing {sorted(set(expected) - set(served))}, extra {sorted(set(served) - set(expected))}")
+          PY
