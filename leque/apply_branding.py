@@ -66,4 +66,20 @@ for variant in ("main", "debug"):
         raise SystemExit(f"Missing Play Store icon: {playstore}")
     make_icon(512, 0.62, True).convert("RGB").save(playstore, optimize=True)
 
-print("PASS: CLOUDX blue/cyan branding applied to main + debug launcher assets")
+# Android TV launcher banner (16:9, 320x180 dp): the same logo on the icon background.
+# API 26+ used the adaptive mipmap-anydpi-v26/ic_banner.xml (upstream artwork): remove it so
+# every Android version uses this banner.
+banner = Image.new("RGBA", (640, 360), (0, 0, 0, 255))
+height = round(360 * 0.5)
+width = round(height * logo.width / logo.height)
+if width > 640 * 0.72:
+    width = round(640 * 0.72)
+    height = round(width * logo.height / logo.width)
+banner.alpha_composite(logo.resize((width, height), Image.Resampling.LANCZOS), ((640 - width) // 2, (360 - height) // 2))
+target = res / "mipmap-xhdpi/ic_banner.png"
+if not target.is_file():
+    raise SystemExit(f"Missing TV banner: {target}")
+banner.convert("RGB").save(target, optimize=True)
+(res / "mipmap-anydpi-v26/ic_banner.xml").unlink(missing_ok=True)
+
+print("PASS: CLOUDX blue/cyan branding applied to main + debug launcher assets and TV banner")
