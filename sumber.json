@@ -611,7 +611,7 @@
     "iconUrl": "https://www.shutterstock.com/image-vector/iptv-vector-line-icon-ip-260nw-1841427610.jpg",
     "apiVersion": 1,
     "repositoryUrl": "https://gitlab.com/tearrs/cloudstream-vietnamese",
-    "fileSize": 30703,
+    "fileSize": 32311,
     "status": 1,
     "authors": [
       "anhdaden"
@@ -622,8 +622,9 @@
     "version": 9,
     "internalName": "IPTVProvider",
     "description": "Cần nhập link IPTV để xem",
-    "url": "https://gitlab.com/tearrs/cloudstream-vietnamese/-/raw/main/IPTVProvider.cs3",
-    "name": "IPTVProvider"
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/IPTVProvider-8760295a88dd.cs3",
+    "name": "IPTVProvider",
+    "fileHash": "sha256-8760295a88dd29011add8fa04e542209412100631dee948c18559e9e1acc565a"
   },
   {
     "url": "https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/Pornhub.cs3",
