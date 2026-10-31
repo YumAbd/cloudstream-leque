@@ -1,4 +1,4 @@
-name: Build CloudXtream V5.0.7 Activation Fix Preview APK
+name: Build CloudXtream V5.0.8 Activation Fix Preview APK
 run-name: CloudXtream preview ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
@@ -96,6 +96,7 @@ jobs:
           python3 leque/fix_activation_v55.py upstream
           python3 leque/fix_activation_v56.py upstream
           python3 leque/catalog_sync_v57.py upstream
+          python3 leque/smart_play_v58.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           git -C upstream diff --check
@@ -113,11 +114,11 @@ jobs:
       - name: Collect APK and patch
         run: |
           mkdir -p out
-          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.7-ActivationFixPreview.apk \;
-          test -s out/CloudXtream-by-Leque-v5.0.7-ActivationFixPreview.apk
-          git -C upstream diff --binary > out/CloudXtream-V5.0.7-ActivationFixPreview-source.patch
+          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.8-ActivationFixPreview.apk \;
+          test -s out/CloudXtream-by-Leque-v5.0.8-ActivationFixPreview.apk
+          git -C upstream diff --binary > out/CloudXtream-V5.0.8-ActivationFixPreview-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
-          sha256sum out/CloudXtream-by-Leque-v5.0.7-ActivationFixPreview.apk > out/SHA256SUMS.txt
+          sha256sum out/CloudXtream-by-Leque-v5.0.8-ActivationFixPreview.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
       - name: Capture debug APK signing certificate (not for OTA deployment)
         shell: bash
@@ -125,7 +126,7 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-by-Leque-v5.0.7-ActivationFixPreview.apk > out/apk-signing-certificate.txt 2>&1; then
+          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-by-Leque-v5.0.8-ActivationFixPreview.apk > out/apk-signing-certificate.txt 2>&1; then
             echo 'FAIL: APK signature verification failed; diagnostic output follows'
             cat out/apk-signing-certificate.txt
             exit 1
@@ -138,13 +139,13 @@ jobs:
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
-          name: CloudXtream-by-Leque-v5.0.7-ActivationFixPreview
+          name: CloudXtream-by-Leque-v5.0.8-ActivationFixPreview
           path: out/
           if-no-files-found: error
           retention-days: 30
       - name: Verify minSdk is Android 8 compatible
         run: |
-          APK=out/CloudXtream-by-Leque-v5.0.7-ActivationFixPreview.apk
+          APK=out/CloudXtream-by-Leque-v5.0.8-ActivationFixPreview.apk
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" > out/apk-badging.txt
@@ -171,7 +172,7 @@ jobs:
             set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
-            adb install -r out/CloudXtream-by-Leque-v5.0.7-ActivationFixPreview.apk
+            adb install -r out/CloudXtream-by-Leque-v5.0.8-ActivationFixPreview.apk
             test -n "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb install -r "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb shell am instrument -w -e class com.lagradost.cloudstream3.activation.CxKeystoreProofTest com.leque.cloudstreamv5.debug.activationfix.test/androidx.test.runner.AndroidJUnitRunner > out/api26-keystore-test.txt
@@ -194,7 +195,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: CloudXtream-Leque-v5.0.7-ActivationFixPreview-Android8-Evidence
+          name: CloudXtream-Leque-v5.0.8-ActivationFixPreview-Android8-Evidence
           path: |
             out/apk-badging.txt
             out/api26-process.txt

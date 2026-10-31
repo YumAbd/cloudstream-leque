@@ -7,6 +7,8 @@ import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.utils.DataStoreHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -33,6 +35,7 @@ object CxWorkerActivation {
     private const val SIGNATURE_SCHEME = "rsa-pkcs1-sha256"
     private const val PREFS = "cx_worker_activation_2026_v1"
     private const val DEVICE_ID = "device_id"
+    private const val PROFILE_NAME_APPLIED = "profile_name_applied"
     private const val MAX_RESPONSE = 16384
     // Server lease (revalidate_in) is clamped locally so a bad response cannot extend it.
     private const val MIN_LEASE_SECONDS = 30L
@@ -76,6 +79,35 @@ object CxWorkerActivation {
         SystemClock.elapsedRealtime() < adminUntilElapsed && adminToken != null
     fun isActivated(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(DEVICE_ID)
+
+    /**
+     * Names the default profile after the license user created in the admin panel.
+     * Only the default name or a name this app applied earlier is replaced, so a profile
+     * the user renamed on the phone is never overwritten.
+     */
+    private fun applyProfileName(context: Context, displayName: String) {
+        val name = displayName.trim().take(40)
+        if (name.isEmpty()) return
+        try {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val applied = prefs.getString(PROFILE_NAME_APPLIED, null)
+            val defaultName = context.getString(R.string.default_account)
+            val accounts = DataStoreHelper.accounts
+            val current = accounts.firstOrNull { it.keyIndex == 0 }
+            val currentName = current?.name ?: defaultName
+            if (currentName == name) return
+            val replaceable = currentName == defaultName || currentName == "Mod v5 by Leque" || currentName == applied
+            if (!replaceable) return
+            DataStoreHelper.accounts = if (current != null) {
+                accounts.map { if (it.keyIndex == 0) it.copy(name = name) else it }.toTypedArray()
+            } else {
+                accounts + DataStoreHelper.Account(keyIndex = 0, name = name, defaultImageIndex = 0)
+            }
+            prefs.edit().putString(PROFILE_NAME_APPLIED, name).apply()
+        } catch (e: Exception) {
+            android.util.Log.w("CxDeviceActivation", "Profile name not applied (" + e.javaClass.simpleName + ")")
+        }
+    }
 
     /** Used only when the owner has reset the previous device and issued a fresh PIN. */
     fun clearStoredDeviceIdForReactivation(context: Context) {
@@ -228,6 +260,7 @@ object CxWorkerActivation {
             }
             // A verified state is intentionally process-local and short-lived.
             checkedUntilElapsed=SystemClock.elapsedRealtime()+leaseMillis(valid)
+            applyProfileName(context,valid.optString("display_name",""))
             lastProblem="none"
             true
         } catch(e:Exception) {
