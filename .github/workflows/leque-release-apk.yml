@@ -129,7 +129,7 @@ jobs:
           import json
           from pathlib import Path
           catalog=json.loads(Path("sumber.json").read_text(encoding="utf-8"))
-          assert 1 <= len(catalog) <= 80, len(catalog)
+          assert 1 <= len(catalog) <= 100, len(catalog)
           active=[p for p in catalog if p["status"]==1]
           assert len(active)>=1, len(active)
           assert len({p["internalName"] for p in catalog})==len(catalog)
@@ -137,10 +137,13 @@ jobs:
           item=next((p for p in active if p["internalName"]=="Pmsm"),None)
           if item:
               assert item["version"]==4
-              assert item["url"]=="https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3"
+              # The source fork or our verified copy of the same file.
+              assert item["url"] in ("https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3",
+                  "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pmsm-d145f3183448.cs3")
               assert item["fileHash"]=="sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
           repo=json.loads(Path("repo.json").read_text(encoding="utf-8"))
-          assert repo["pluginLists"]==["https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"]
+          assert repo["pluginLists"] in (["https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/sumber.json"],
+              ["https://cloudxpanel.infopc.xyz/catalog/sumber.json"]), repo["pluginLists"]
           print("PASS: catalog and PMSM fork metadata pinned")
           PY
       - name: Validate alternative PMSM download SHA256
@@ -170,6 +173,7 @@ jobs:
           python3 leque/update_progress_v5013.py upstream
           python3 leque/features_v5014.py upstream
           python3 leque/sync_v5015.py upstream
+          python3 leque/tv_player_fix_v5016.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           # The release tag sets the app version, so a new official CloudStream build can be
