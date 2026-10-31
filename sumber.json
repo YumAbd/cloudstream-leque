@@ -1,6 +1,6 @@
 [
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/Alqanime.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Alqanime-9eb1014f2938.cs3",
     "status": 1,
     "version": 31,
     "name": "Alqanime",
@@ -22,7 +22,7 @@
     "fileHash": "sha256-9eb1014f29387d50b375ed813f13e3d0eee671fbde9b5fbba556768f1c2ba42d"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/AnimeIndo.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/AnimeIndo-5cbcc9352444.cs3",
     "status": 1,
     "version": 25,
     "name": "AnimeIndo",
@@ -44,7 +44,7 @@
     "fileHash": "sha256-5cbcc9352444c7b6b0aeef6a899a072046feeb2339064a18fa1691de0a15f331"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/Astronime.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Astronime-671ddc27ae27.cs3",
     "status": 1,
     "version": 8,
     "name": "Astronime",
@@ -65,7 +65,7 @@
     "fileHash": "sha256-671ddc27ae27caadc94adbbfd9bd0eaaa697cfd1e52863c0828dac8807cf5e82"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/Cinemax21Provider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Cinemax21Provider-7461defedc54.cs3",
     "status": 1,
     "version": 12,
     "name": "Cinemax21Provider",
@@ -87,7 +87,7 @@
     "fileHash": "sha256-7461defedc54efe1188a6a9732369b2b59185505f7e534c14a7aa5606d3fa6f2"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/DailymotionProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/DailymotionProvider-6ca430fb7885.cs3",
     "status": 1,
     "version": 13,
     "name": "DailymotionProvider",
@@ -112,7 +112,7 @@
     "fileHash": "sha256-6ca430fb78857092bb5f626f388caa2562bbb653b942bebf22d0a057597435ad"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/Donghuastream.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Donghuastream-558fc73d686c.cs3",
     "status": 1,
     "version": 17,
     "name": "Donghuastream",
@@ -133,7 +133,7 @@
     "fileHash": "sha256-558fc73d686c1da05d82bd5198fa65a1efd966985fb657ed441c8b17ab140530"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/Donghub.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Donghub-47131c0c3771.cs3",
     "status": 1,
     "version": 16,
     "name": "Donghub",
@@ -155,7 +155,7 @@
     "fileHash": "sha256-47131c0c37716bdcfc0d422ba7865df6caeadf082d336600f81e66a56fb9ce8c"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/DracinSI.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/DracinSI-5042c6fb117a.cs3",
     "status": 1,
     "version": 4,
     "name": "DracinSI",
@@ -177,7 +177,7 @@
     "fileHash": "sha256-5042c6fb117a293a4835be5f1d30bdb8dc79c96adb8bc83bd7e4fd3f4747afff"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/DubbindoProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/DubbindoProvider-d522da93a5b3.cs3",
     "status": 1,
     "version": 6,
     "name": "DubbindoProvider",
@@ -201,7 +201,7 @@
     "fileHash": "sha256-d522da93a5b35fc4f038cc08238485b8e988b1fa20d3de80690301a7bd15e0fa"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/FreeReels.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/FreeReels-979bc585e5fa.cs3",
     "status": 1,
     "version": 33,
     "name": "FreeReels",
