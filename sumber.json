@@ -223,7 +223,7 @@
     "fileHash": "sha256-979bc585e5fad6040ab7fa981b137ad97144defeb2157cef8280762d87f70d99"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/HidoriStreamProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/HidoriStreamProvider-2552f830129c.cs3",
     "status": 1,
     "version": 10,
     "name": "HidoriStreamProvider",
@@ -245,7 +245,7 @@
     "fileHash": "sha256-2552f830129c2f23d528da0e3c375bac71e410e8204bfec5e469b96410a99b36"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/IdlixProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/IdlixProvider-ca8868087e3f.cs3",
     "status": 1,
     "version": 49,
     "name": "IdlixProvider",
@@ -268,7 +268,7 @@
     "fileHash": "sha256-ca8868087e3fd7f9014aa4bcd9fb3283fb68bd703a4f66dec623f6715ea57286"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/JuraganFilm.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/JuraganFilm-4f294d9987c5.cs3",
     "status": 1,
     "version": 19,
     "name": "JuraganFilm",
@@ -291,7 +291,7 @@
     "fileHash": "sha256-4f294d9987c5f222c104518581209704a5bd7b0a29689f86bdc716c8f0354cd5"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/KikoNime.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KikoNime-02e7212169bd.cs3",
     "status": 1,
     "version": 4,
     "name": "KikoNime",
@@ -313,7 +313,7 @@
     "fileHash": "sha256-02e7212169bd010b1d9fcb6c078b87b01218be8971c18b1b35a4566b9614eaac"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/KuramanimeProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KuramanimeProvider-949218cd4f1c.cs3",
     "status": 1,
     "version": 50,
     "name": "KuramanimeProvider",
@@ -334,7 +334,7 @@
     "fileHash": "sha256-949218cd4f1c1f0e51c1ea8d09cd1aefe07f031a56500b9c3fdd0d50b236f418"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/KuronimeProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KuronimeProvider-3dd02365736f.cs3",
     "status": 1,
     "version": 3,
     "name": "KuronimeProvider",
@@ -356,7 +356,7 @@
     "fileHash": "sha256-3dd02365736fe45b72cdce98bd165129c97c71f0b29df8135c675bfcd784d98b"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/OtakudesuProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/OtakudesuProvider-15fd2b6a132e.cs3",
     "status": 1,
     "version": 14,
     "name": "OtakudesuProvider",
@@ -378,7 +378,7 @@
     "fileHash": "sha256-15fd2b6a132edf0122c18283b3d1fc5991581c01f3a5282203269bbfa0f42518"
   },
   {
-    "url": "https://raw.githubusercontent.com/sad25kag/BetbetMiro-Extension/builds/YouTube.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/YouTube-6b7a25a5cf53.cs3",
     "status": 1,
     "version": 5,
     "name": "YouTube",
@@ -398,7 +398,7 @@
     "fileHash": "sha256-6b7a25a5cf537682ba62e9a86a3909257dbec97a7d261d42dd461931e535c390"
   },
   {
-    "url": "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/builds/Chikianimation.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Chikianimation-463cd68d874e.cs3",
     "status": 1,
     "version": 2,
     "name": "Chikianimation",
@@ -419,7 +419,7 @@
     "fileHash": "sha256-463cd68d874eaaab02636de6180e4fc9f564451c3478454c98d54e621930c0e1"
   },
   {
-    "url": "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/builds/KisskhProvider.cs3",
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KisskhProvider-596cda263fee.cs3",
     "status": 1,
     "version": 24,
     "name": "KisskhProvider",
