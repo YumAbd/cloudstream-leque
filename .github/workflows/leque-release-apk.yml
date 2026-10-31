@@ -164,8 +164,16 @@ jobs:
           python3 leque/catalog_sync_v57.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
-          VERSION="$(sed -n 's/^versionName = "\(.*\)"/\1/p' upstream/gradle/libs.versions.toml)"
-          test "v$VERSION" = "$RELEASE_TAG" || { echo "FAIL: tag $RELEASE_TAG does not match app version $VERSION"; exit 1; }
+          # The release tag sets the app version, so a new official CloudStream build can be
+          # published as the next version without a new patch script: vX.Y.Z -> versionCode X*10000+Y*100+Z.
+          [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})$ ]] || { echo "FAIL: release tag must be vX.Y.Z with Y,Z < 100"; exit 1; }
+          VERSION="${RELEASE_TAG#v}"
+          CODE=$(( BASH_REMATCH[1]*10000 + BASH_REMATCH[2]*100 + BASH_REMATCH[3] ))
+          CURRENT_CODE="$(sed -n 's/^versionCode = "\([0-9]*\)"/\1/p' upstream/gradle/libs.versions.toml)"
+          test -n "$CURRENT_CODE"
+          test "$CODE" -ge "$CURRENT_CODE" || { echo "FAIL: $RELEASE_TAG ($CODE) is older than the patched app ($CURRENT_CODE)"; exit 1; }
+          sed -i "s/^versionCode = \"[0-9]*\"/versionCode = \"$CODE\"/; s/^versionName = \".*\"/versionName = \"$VERSION\"/" upstream/gradle/libs.versions.toml
+          grep -E '^version(Code|Name) = ' upstream/gradle/libs.versions.toml
           git -C upstream diff --check
       - name: Compile Android stable release APK (unsigned)
         working-directory: upstream
