@@ -19,5 +19,7 @@ This repository is **public**: never commit the keystore or password, and never 
 them as artifacts. Back up the keystore and password in a password manager; if they are
 lost, existing installs cannot be updated in place.
 
-To publish a new version: bump `versionCode`/`versionName` with a new `leque/*` patch
-script, merge to `apk-build`, then run the workflow with `release_tag=v<versionName>`.
+The release tag sets the app version: `vX.Y.Z` becomes versionName `X.Y.Z` and versionCode
+`X*10000 + Y*100 + Z` (Y and Z below 100). A tag older than the patched app version is refused.
+To publish: Telegram `/release` (or the "Publish signed release" button after a successful preview
+build), or run the workflow manually with the next `release_tag`.
