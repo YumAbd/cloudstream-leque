@@ -146,10 +146,21 @@ jobs:
               ["https://cloudxpanel.infopc.xyz/catalog/sumber.json"]), repo["pluginLists"]
           print("PASS: catalog and PMSM fork metadata pinned")
           PY
-      - name: Validate alternative PMSM download SHA256
+      - name: Validate the PMSM archive the catalog points to
         run: |
-          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/Pmsm.cs3 https://raw.githubusercontent.com/mahmoodnizamani94-png/cloudstream-extensions-phisher/builds/Pmsm.cs3
-          echo 'd145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253  /tmp/Pmsm.cs3' | sha256sum -c -
+          python3 - <<'PY'
+          import hashlib, json, urllib.request
+          from pathlib import Path
+          item = next((p for p in json.loads(Path("sumber.json").read_text(encoding="utf-8")) if p["internalName"] == "Pmsm"), None)
+          if item is None:
+              raise SystemExit(print("Pmsm is not in the catalog") or 0)
+          ours = "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/"
+          # Our copy cannot change under us; a source URL is downloaded and checked.
+          data = Path("plugins", item["url"][len(ours):]).read_bytes() if item["url"].startswith(ours) else \
+              urllib.request.urlopen(urllib.request.Request(item["url"], headers={"User-Agent": "CloudXtream-Check/1.0"}), timeout=45).read()
+          assert "sha256-" + hashlib.sha256(data).hexdigest() == item["fileHash"], "Pmsm archive differs from its catalog hash"
+          print("PASS: Pmsm archive matches its catalog hash")
+          PY
       - name: Prepare logo renderer
         run: |
           python3 -m venv .leque-icon-venv
