@@ -54,15 +54,15 @@ CX={  # name: (English, Bahasa Melayu)
  "cx_sleep_paused":("Sleep timer: video paused","Pemasa tidur: video dihentikan"),
  "cx_report":("Report a problem","Lapor masalah"),
  "cx_report_sending":("Sending report…","Menghantar laporan…"),
- "cx_report_sent":("Thank you! The report was sent to the owner.","Terima kasih! Laporan telah dihantar kepada pemilik."),
+ "cx_report_sent":("Thank you! The report was sent to the CloudXtream admin.","Terima kasih! Laporan telah dihantar kepada admin CloudXtream."),
  "cx_report_failed":("The report could not be sent. Check the Internet and try again.","Laporan gagal dihantar. Semak Internet dan cuba lagi."),
  "cx_kids_profile":("Kids profile (parent PIN needed to leave)","Profile Kanak-kanak (perlu PIN ibu bapa untuk keluar)"),
  "cx_kids_blocked":("This title is not available in the Kids profile.","Tajuk ini tidak tersedia dalam Profile Kanak-kanak."),
 }
 REASONS=(["The video does not play","Keeps loading or freezing","Wrong or missing subtitles","Audio out of sync","Wrong movie or episode","Something else"],
          ["Video tidak boleh dimainkan","Asyik loading atau tersekat","Sari kata salah atau tiada","Audio tidak selari","Movie atau episod salah","Lain-lain"])
-EXPIRY=({"one":"Your license expires in %d day. Contact the owner to extend it.","other":"Your license expires in %d days. Contact the owner to extend it."},
-        {"other":"Lesen anda tamat dalam %d hari. Hubungi pemilik lesen untuk menyambungnya."})
+EXPIRY=({"one":"Your license expires in %d day. Contact the CloudXtream admin to extend it.","other":"Your license expires in %d days. Contact the CloudXtream admin to extend it."},
+        {"other":"Lesen anda tamat dalam %d hari. Hubungi admin CloudXtream untuk menyambungnya."})
 
 # Malay for upstream strings shown in everyday screens that the upstream Malay file lacks.
 MS_UPSTREAM={

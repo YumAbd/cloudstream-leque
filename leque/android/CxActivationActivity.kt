@@ -66,7 +66,7 @@ class CxActivationActivity : AppCompatActivity() {
         }
         root.addView(caption("CLOUDXTREAM",29f,Color.rgb(0,204,239)))
         root.addView(caption("by Leque",16f,Color.LTGRAY))
-        root.addView(caption("Aplikasi ini perlu diaktifkan dengan PIN daripada pemilik lesen.\nSambungan Internet diperlukan.",15f,Color.WHITE))
+        root.addView(caption("Aplikasi ini perlu diaktifkan dengan PIN daripada admin CloudXtream.\nSambungan Internet diperlukan.",15f,Color.WHITE))
         status=caption("Menyemak pengaktifan…",14f,Color.rgb(175,209,227))
         root.addView(status)
         pin=EditText(this).apply {
@@ -88,7 +88,7 @@ class CxActivationActivity : AppCompatActivity() {
         changeDevice=button("Saya ada PIN baharu").also {
             root.addView(it,LinearLayout.LayoutParams(-1,dp(56)))
         }
-        val spacer=caption("PIN ada tempoh sah yang ditetapkan oleh pemilik.\nHubungi pemilik lesen jika peranti perlu ditetapkan semula.",12f,Color.LTGRAY)
+        val spacer=caption("PIN ada tempoh sah yang ditetapkan oleh admin CloudXtream.\nHubungi admin CloudXtream jika peranti perlu ditetapkan semula.",12f,Color.LTGRAY)
         root.addView(spacer)
         outer.addView(root)
         setContentView(outer)
@@ -98,7 +98,7 @@ class CxActivationActivity : AppCompatActivity() {
         changeDevice.setOnClickListener {
             CxWorkerActivation.clearStoredDeviceIdForReactivation(this)
             render()
-            status.text="Masukkan PIN BAHARU yang diberi oleh pemilik."
+            status.text="Masukkan PIN BAHARU yang diberi oleh admin CloudXtream."
         }
         render()
         if(CxWorkerActivation.isActivated(this))verifyExisting()
@@ -110,7 +110,7 @@ class CxActivationActivity : AppCompatActivity() {
         submit.visibility=if(already)View.GONE else View.VISIBLE
         retry.visibility=if(already)View.VISIBLE else View.GONE
         changeDevice.visibility=if(already)View.VISIBLE else View.GONE
-        if(!already)status.text="Masukkan PIN yang diberi oleh pemilik lesen."
+        if(!already)status.text="Masukkan PIN yang diberi oleh admin CloudXtream."
     }
     private fun setBusy(value:Boolean){
         busy=value
@@ -121,13 +121,13 @@ class CxActivationActivity : AppCompatActivity() {
     }
     /** Plain-language reason for a refused PIN or a device that lost access (server error codes). */
     private fun reason(code:String?):String? = when(code){
-        "pin_not_found","invalid_pin" -> "PIN tidak sah. Semak semula 6 aksara PIN, atau minta PIN daripada pemilik lesen."
-        "pin_expired" -> "PIN ini telah TAMAT TEMPOH. Sila hubungi pemilik lesen untuk mendapatkan PIN baharu."
-        "pin_replaced" -> "PIN ini telah digantikan dengan PIN yang lebih baharu. Sila guna PIN terkini daripada pemilik lesen."
-        "license_inactive" -> "Lesen anda sedang DIGANTUNG atau DIBATALKAN. Sila hubungi pemilik lesen."
-        "license_expired" -> "Lesen anda telah TAMAT TEMPOH. Hubungi pemilik lesen untuk menyambungnya."
-        "device_revoked" -> "Peranti ini telah DIKELUARKAN daripada lesen (mungkin diganti dengan peranti lain). Tekan \"Saya ada PIN baharu\" dan masukkan PIN daripada pemilik lesen."
-        "device_limit_reached" -> "Had peranti lesen ini sudah PENUH. Minta pemilik lesen mengeluarkan peranti lama atau menambah had."
+        "pin_not_found","invalid_pin" -> "PIN tidak sah. Semak semula 6 aksara PIN, atau minta PIN daripada admin CloudXtream."
+        "pin_expired" -> "PIN ini telah TAMAT TEMPOH. Sila hubungi admin CloudXtream untuk mendapatkan PIN baharu."
+        "pin_replaced" -> "PIN ini telah digantikan dengan PIN yang lebih baharu. Sila guna PIN terkini daripada admin CloudXtream."
+        "license_inactive" -> "Lesen anda sedang DIGANTUNG atau DIBATALKAN. Sila hubungi admin CloudXtream."
+        "license_expired" -> "Lesen anda telah TAMAT TEMPOH. Hubungi admin CloudXtream untuk menyambungnya."
+        "device_revoked" -> "Peranti ini telah DIKELUARKAN daripada lesen (mungkin diganti dengan peranti lain). Tekan \"Saya ada PIN baharu\" dan masukkan PIN daripada admin CloudXtream."
+        "device_limit_reached" -> "Had peranti lesen ini sudah PENUH. Minta admin CloudXtream mengeluarkan peranti lama atau menambah had."
         "device_not_found" -> "Peranti yang dipilih sudah tiada dalam lesen. Cuba aktifkan semula."
         "too_many_attempts" -> "Terlalu banyak percubaan. Tunggu 15 minit dan cuba lagi."
         else -> null
@@ -176,9 +176,9 @@ class CxActivationActivity : AppCompatActivity() {
                 val expired=CxWorkerActivation.licenseExpiresMs(this@CxActivationActivity)
                     ?.let { it<=System.currentTimeMillis() }==true
                 status.text=reason(CxWorkerActivation.lastServerError())
-                    ?: if(expired)"Lesen anda telah tamat tempoh. Hubungi pemilik lesen untuk menyambungnya, kemudian tekan Cuba semak semula."
+                    ?: if(expired)"Lesen anda telah tamat tempoh. Hubungi admin CloudXtream untuk menyambungnya, kemudian tekan Cuba semak semula."
                     else "Semakan dalam talian gagal ("+CxWorkerActivation.lastActivationProblem()+
-                    "). Semak Internet, atau minta pemilik beri PIN baharu."
+                    "). Semak Internet, atau minta admin CloudXtream beri PIN baharu."
             }
         }
     }
@@ -203,10 +203,10 @@ class CxActivationActivity : AppCompatActivity() {
                         "). JANGAN minta PIN lain. Tekan Cuba semak semula."
                 else reason(CxWorkerActivation.lastServerError())
                     ?: ("Pengaktifan tidak berjaya ("+CxWorkerActivation.lastActivationProblem()+
-                    "). Semak PIN dan Internet, atau hubungi pemilik.")
+                    "). Semak PIN dan Internet, atau hubungi admin CloudXtream.")
                 if(!CxWorkerActivation.isActivated(this@CxActivationActivity) &&
                     CxWorkerActivation.lastServerError()=="device_limit_reached"){
-                    status.text="Had peranti lesen ini sudah PENUH. Pilih peranti lama untuk diganti, atau minta pemilik lesen mengeluarkan peranti lama."
+                    status.text="Had peranti lesen ini sudah PENUH. Pilih peranti lama untuk diganti, atau minta admin CloudXtream mengeluarkan peranti lama."
                     offerReplace()
                 }
             }
