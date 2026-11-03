@@ -14,6 +14,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
@@ -118,6 +119,51 @@ class CxActivationActivity : AppCompatActivity() {
         changeDevice.isEnabled=!value
         pin.isEnabled=!value
     }
+    /** Plain-language reason for a refused PIN or a device that lost access (server error codes). */
+    private fun reason(code:String?):String? = when(code){
+        "pin_not_found","invalid_pin" -> "PIN tidak sah. Semak semula 6 aksara PIN, atau minta PIN daripada pemilik lesen."
+        "pin_expired" -> "PIN ini telah TAMAT TEMPOH. Sila hubungi pemilik lesen untuk mendapatkan PIN baharu."
+        "pin_replaced" -> "PIN ini telah digantikan dengan PIN yang lebih baharu. Sila guna PIN terkini daripada pemilik lesen."
+        "license_inactive" -> "Lesen anda sedang DIGANTUNG atau DIBATALKAN. Sila hubungi pemilik lesen."
+        "license_expired" -> "Lesen anda telah TAMAT TEMPOH. Hubungi pemilik lesen untuk menyambungnya."
+        "device_revoked" -> "Peranti ini telah DIKELUARKAN daripada lesen (mungkin diganti dengan peranti lain). Tekan \"Saya ada PIN baharu\" dan masukkan PIN daripada pemilik lesen."
+        "device_limit_reached" -> "Had peranti lesen ini sudah PENUH. Minta pemilik lesen mengeluarkan peranti lama atau menambah had."
+        "device_not_found" -> "Peranti yang dipilih sudah tiada dalam lesen. Cuba aktifkan semula."
+        "too_many_attempts" -> "Terlalu banyak percubaan. Tunggu 15 minit dan cuba lagi."
+        else -> null
+    }
+
+    private fun date(ms:Long):String =
+        if(ms<=0L)"—" else java.text.SimpleDateFormat("d MMM yyyy, HH:mm",Locale("ms")).format(java.util.Date(ms))
+
+    /** License full but the PIN is valid: let the user pick which of their devices this one replaces. */
+    private fun offerReplace(){
+        val body=CxWorkerActivation.lastServerErrorBody() ?: return
+        val list=body.optJSONArray("devices") ?: return
+        if(!body.optBoolean("can_replace") || list.length()==0) return
+        val ids=ArrayList<String>(); val labels=ArrayList<String>()
+        for(i in 0 until list.length()){
+            val d=list.optJSONObject(i) ?: continue
+            val id=d.optString("id").takeIf { it.isNotBlank() } ?: continue
+            val name=d.optString("label").takeIf { it.isNotBlank() && it!="null" } ?: ("Peranti "+id.take(8))
+            ids.add(id)
+            labels.add(name+"\nTerakhir digunakan: "+date(d.optLong("last_seen_ms",d.optLong("created_ms"))))
+        }
+        if(ids.isEmpty())return
+        AlertDialog.Builder(this)
+            .setTitle("Had peranti penuh ("+body.optInt("active_devices")+"/"+body.optInt("max_devices")+"). Pilih peranti untuk diganti:")
+            .setItems(labels.toTypedArray()){ _,which ->
+                AlertDialog.Builder(this)
+                    .setTitle("Ganti peranti?")
+                    .setMessage(labels[which].substringBefore("\n")+" akan dikeluarkan daripada lesen, dan peranti ini akan diaktifkan sebagai gantinya.")
+                    .setPositiveButton("Ganti"){ _,_ -> activate(ids[which]) }
+                    .setNegativeButton("Batal",null)
+                    .show()
+            }
+            .setNegativeButton("Batal",null)
+            .show()
+    }
+
     private fun verifyExisting(){
         if(busy)return
         setBusy(true)
@@ -129,13 +175,14 @@ class CxActivationActivity : AppCompatActivity() {
                 setBusy(false)
                 val expired=CxWorkerActivation.licenseExpiresMs(this@CxActivationActivity)
                     ?.let { it<=System.currentTimeMillis() }==true
-                status.text=if(expired)"Lesen anda telah tamat tempoh. Hubungi pemilik lesen untuk menyambungnya, kemudian tekan Cuba semak semula."
+                status.text=reason(CxWorkerActivation.lastServerError())
+                    ?: if(expired)"Lesen anda telah tamat tempoh. Hubungi pemilik lesen untuk menyambungnya, kemudian tekan Cuba semak semula."
                     else "Semakan dalam talian gagal ("+CxWorkerActivation.lastActivationProblem()+
                     "). Semak Internet, atau minta pemilik beri PIN baharu."
             }
         }
     }
-    private fun activate(){
+    private fun activate(replaceDeviceId:String?=null){
         if(busy)return
         val code=pin.text.toString().trim().uppercase(Locale.ROOT)
         if(!Regex("^[A-Z2-7]{6}$").matches(code)){
@@ -145,7 +192,7 @@ class CxActivationActivity : AppCompatActivity() {
         setBusy(true)
         status.text="Sedang mengaktifkan. Pastikan Internet bersambung…"
         lifecycleScope.launch {
-            val ok=CxWorkerActivation.activate(this@CxActivationActivity,code)
+            val ok=CxWorkerActivation.activate(this@CxActivationActivity,code,replaceDeviceId)
             if(ok)enterApp()
             else {
                 setBusy(false)
@@ -154,8 +201,14 @@ class CxActivationActivity : AppCompatActivity() {
                     "Peranti TELAH didaftarkan, tetapi semakan semula gagal ("+
                         CxWorkerActivation.lastActivationProblem()+
                         "). JANGAN minta PIN lain. Tekan Cuba semak semula."
-                else "Pengaktifan tidak berjaya ("+CxWorkerActivation.lastActivationProblem()+
-                    "). Semak PIN dan Internet, atau hubungi pemilik."
+                else reason(CxWorkerActivation.lastServerError())
+                    ?: ("Pengaktifan tidak berjaya ("+CxWorkerActivation.lastActivationProblem()+
+                    "). Semak PIN dan Internet, atau hubungi pemilik.")
+                if(!CxWorkerActivation.isActivated(this@CxActivationActivity) &&
+                    CxWorkerActivation.lastServerError()=="device_limit_reached"){
+                    status.text="Had peranti lesen ini sudah PENUH. Pilih peranti lama untuk diganti, atau minta pemilik lesen mengeluarkan peranti lama."
+                    offerReplace()
+                }
             }
         }
     }

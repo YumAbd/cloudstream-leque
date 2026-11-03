@@ -48,10 +48,16 @@ object CxWorkerActivation {
     @Volatile private var adminUntilElapsed: Long = 0L
     @Volatile private var adminToken: String? = null
     @Volatile private var lastProblem: String = "not_checked"
+    @Volatile private var lastErrorCode: String? = null
+    @Volatile private var lastErrorBody: JSONObject? = null
 
     fun lastActivationProblem(): String = lastProblem
+    /** Server error code of the last failure (e.g. pin_expired, device_limit_reached), if any. */
+    fun lastServerError(): String? = lastErrorCode
+    /** Server answer of the last failure (device_limit_reached lists the license's devices). */
+    fun lastServerErrorBody(): JSONObject? = lastErrorBody
 
-    private class ApiProblem(val status: Int,val code:String) : IOException("server_error")
+    private class ApiProblem(val status: Int,val code:String,val body:JSONObject) : IOException("server_error")
     private fun recordProblem(stage:String,e:Exception){
         // Never include PINs, request bodies, private keys or tokens in logs.
         val kind=when(e){
@@ -64,6 +70,8 @@ object CxWorkerActivation {
             else -> e.javaClass.simpleName.take(48)
         }
         lastProblem=stage+":"+kind
+        lastErrorCode=(e as? ApiProblem)?.code
+        lastErrorBody=(e as? ApiProblem)?.body
         android.util.Log.w("CxDeviceActivation","Failed "+stage+" ("+kind+")")
     }
 
@@ -200,17 +208,29 @@ object CxWorkerActivation {
             if(responseCode !in 200..299){
                 val error=body.optString("error","unknown").take(60)
                     .takeIf{Regex("^[a-z0-9_]+$").matches(it)}?:"unknown"
-                throw ApiProblem(responseCode,error)
+                throw ApiProblem(responseCode,error,body)
             }
             return body
         } finally { connection.disconnect() }
     }
 
-    /** Use once on initial install, then call validateOnline before opening Home. */
-    suspend fun activate(context: Context, pin: String): Boolean = withContext(Dispatchers.IO) {
+    /** Phone/TV model shown to the owner and in the "replace a device" list. */
+    private fun deviceLabel(): String {
+        val maker=android.os.Build.MANUFACTURER.orEmpty().trim()
+        val model=android.os.Build.MODEL.orEmpty().trim()
+        return (if(model.startsWith(maker,ignoreCase=true)) model else "$maker $model").trim().take(60)
+    }
+
+    /**
+     * Use once on initial install, then call validateOnline before opening Home.
+     * [replaceDeviceId]: when the license is full, the device (from the server's list) this one replaces.
+     */
+    suspend fun activate(context: Context, pin: String, replaceDeviceId: String? = null): Boolean = withContext(Dispatchers.IO) {
         var stage="challenge"
         try {
             lastProblem="none"
+            lastErrorCode=null
+            lastErrorBody=null
             val challenge=post("/api/device/challenge",JSONObject().put("purpose","activate"))
             val challengeId=challenge.getString("challenge_id")
             val nonce=challenge.getString("nonce")
@@ -223,6 +243,8 @@ object CxWorkerActivation {
                 .put("public_key_spki",publicKey)
                 .put("signature",proof)
                 .put("signature_scheme",SIGNATURE_SCHEME)
+                .put("device_label",deviceLabel())
+                .apply { if(replaceDeviceId!=null)put("replace_device_id",replaceDeviceId) }
                 .put("pin",pin))
             val deviceId=response.getString("device_id")
             // Only a public identifier is persisted; no static device or admin bearer token.
@@ -267,6 +289,8 @@ object CxWorkerActivation {
                 .putLong(LICENSE_EXPIRES,if(valid.isNull("license_expires_ms"))-1L else valid.optLong("license_expires_ms",-1L))
                 .apply()
             lastProblem="none"
+            lastErrorCode=null
+            lastErrorBody=null
             true
         } catch(e:Exception) {
             recordProblem(stage,e)
