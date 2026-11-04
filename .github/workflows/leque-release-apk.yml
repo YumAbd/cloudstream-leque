@@ -168,6 +168,7 @@ jobs:
       - name: Apply Leque customization
         env:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          LEQUE_UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
         run: |
           python3 leque/customize.py upstream
           python3 leque/customize_v52.py upstream
