@@ -5,7 +5,15 @@ import re
 import subprocess
 import sys
 
-SHA = "5024ace2922a148d38df2a816b483b529789cf58"
+import os
+import re
+
+# Official CloudStream commit the patches were written for. A workflow may build another official
+# commit (compatibility test of a new CloudStream version) by passing it in LEQUE_UPSTREAM_SHA after
+# checking it out; every patch still requires its exact anchors, so a changed file fails the build.
+SHA = os.environ.get("LEQUE_UPSTREAM_SHA") or "5024ace2922a148d38df2a816b483b529789cf58"
+if not re.fullmatch(r"[0-9a-f]{40}", SHA):
+    sys.exit("FAIL: invalid LEQUE_UPSTREAM_SHA")
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv)>1 else Path("upstream").resolve()
 if subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()!=SHA:
     sys.exit("FAIL: official source SHA mismatch")

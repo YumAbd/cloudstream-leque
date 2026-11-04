@@ -1,5 +1,5 @@
-name: Build CloudXtream V5.0.19 Activation Fix Preview APK
-run-name: CloudXtream preview ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
+name: Build CloudXtream preview APK (patches V5.0.19)
+run-name: CloudXtream preview (patches V5.0.19) on official CloudStream ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
     branches: [apk-build]
@@ -102,6 +102,8 @@ jobs:
           python3 -m venv .leque-icon-venv
           .leque-icon-venv/bin/python -m pip install --disable-pip-version-check 'Pillow==11.3.0' 'CairoSVG==2.8.2'
       - name: Apply Leque customization
+        env:
+          LEQUE_UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
         run: |
           python3 leque/customize.py upstream
           python3 leque/customize_v52.py upstream
