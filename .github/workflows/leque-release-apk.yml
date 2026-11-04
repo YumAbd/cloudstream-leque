@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Release tag vX.Y.Z (published to users) or vX.Y.Z-beta (test build, GitHub pre-release)
+        description: Release tag vX.Y.Z (published to users) or vX.Y.Z-prerelease (test build of the current version, GitHub pre-release)
         required: true
         type: string
         default: v5.0.6
@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta)?$ ]] || { echo 'FAIL: invalid release tag'; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-prerelease)?$ ]] || { echo 'FAIL: invalid release tag'; exit 1; }
           test "${#KS_B64}" -gt 1000 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_B64'; exit 1; }
           test "${#KS_PASS}" -ge 20 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_PASSWORD'; exit 1; }
           test -n "$KS_ALIAS" || { echo '::error::Missing secret CX_RELEASE_KEY_ALIAS'; exit 1; }
@@ -193,8 +193,9 @@ jobs:
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           # The release tag sets the app version, so a new official CloudStream build can be
           # published as the next version without a new patch script: vX.Y.Z -> versionCode X*10000+Y*100+Z.
-          # A vX.Y.Z-beta test build gets versionName X.Y.Z-beta and the same versionCode as vX.Y.Z.
-          [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})(-beta)?$ ]] || { echo "FAIL: release tag must be vX.Y.Z or vX.Y.Z-beta with Y,Z < 100"; exit 1; }
+          # A vX.Y.Z-prerelease test build (X.Y.Z = the current release) gets versionName X.Y.Z-prerelease and
+          # the versionCode of vX.Y.Z, so a tester's phone is offered the next real release as an update.
+          [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})(-prerelease)?$ ]] || { echo "FAIL: release tag must be vX.Y.Z or vX.Y.Z-prerelease with Y,Z < 100"; exit 1; }
           VERSION="${RELEASE_TAG#v}"
           CODE=$(( BASH_REMATCH[1]*10000 + BASH_REMATCH[2]*100 + BASH_REMATCH[3] ))
           CURRENT_CODE="$(sed -n 's/^versionCode = "\([0-9]*\)"/\1/p' upstream/gradle/libs.versions.toml)"
@@ -335,19 +336,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
-          PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease || endsWith(inputs.release_tag, '-beta') }}
+          PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease || endsWith(inputs.release_tag, '-prerelease') }}
         shell: bash
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::error::Release $RELEASE_TAG already exists; bump the app version instead of replacing a signed APK"; exit 1
+            if [[ "$RELEASE_TAG" == *-prerelease ]]; then
+              # Test builds are disposable: a newer test build of the same version replaces the old one.
+              gh release delete "$RELEASE_TAG" --cleanup-tag --yes
+            else
+              echo "::error::Release $RELEASE_TAG already exists; bump the app version instead of replacing a signed APK"; exit 1
+            fi
           fi
           FP="$(tr -d ' \r\n' < leque/release-signing-cert.sha256)"
           SUM="$(cut -d' ' -f1 out/SHA256SUMS.txt)"
           {
-            if [[ "$RELEASE_TAG" == *-beta ]]; then
-              echo "CloudXtream by Leque $RELEASE_TAG: BETA for testing by the CloudXtream admin. It is not offered to users;"
-              echo "${RELEASE_TAG%-beta} is published to users after this beta is approved."
+            if [[ "$RELEASE_TAG" == *-prerelease ]]; then
+              echo "CloudXtream by Leque $RELEASE_TAG: PRE-RELEASE for testing by the CloudXtream admin. It is not offered"
+              echo "to users, and it is deleted when the next version is published."
             else
               echo "CloudXtream by Leque $RELEASE_TAG (signed release)."
             fi
@@ -368,3 +374,8 @@ jobs:
             "out/CloudXtream-by-Leque-$RELEASE_TAG.apk" out/SHA256SUMS.txt \
             "out/CloudXtream-$RELEASE_TAG-source.patch" out/CloudStream-GPL-3.0-LICENSE.txt \
             out/apk-signing-certificate.txt
+          # A published version replaces every test pre-release (they are not kept as an archive).
+          if [[ "$RELEASE_TAG" != *-prerelease ]]; then
+            gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-(prerelease|beta)$' |
+              while read -r old; do echo "Deleting test pre-release $old"; gh release delete "$old" --cleanup-tag --yes; done || true
+          fi
