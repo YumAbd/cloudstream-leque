@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Release tag, must equal the patched app version (e.g. v5.0.6)
+        description: Release tag vX.Y.Z (published to users) or vX.Y.Z-beta (test build, GitHub pre-release)
         required: true
         type: string
         default: v5.0.6
@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'FAIL: invalid release tag'; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta)?$ ]] || { echo 'FAIL: invalid release tag'; exit 1; }
           test "${#KS_B64}" -gt 1000 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_B64'; exit 1; }
           test "${#KS_PASS}" -ge 20 || { echo '::error::Missing secret CX_RELEASE_KEYSTORE_PASSWORD'; exit 1; }
           test -n "$KS_ALIAS" || { echo '::error::Missing secret CX_RELEASE_KEY_ALIAS'; exit 1; }
@@ -193,7 +193,8 @@ jobs:
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           # The release tag sets the app version, so a new official CloudStream build can be
           # published as the next version without a new patch script: vX.Y.Z -> versionCode X*10000+Y*100+Z.
-          [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})$ ]] || { echo "FAIL: release tag must be vX.Y.Z with Y,Z < 100"; exit 1; }
+          # A vX.Y.Z-beta test build gets versionName X.Y.Z-beta and the same versionCode as vX.Y.Z.
+          [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})(-beta)?$ ]] || { echo "FAIL: release tag must be vX.Y.Z or vX.Y.Z-beta with Y,Z < 100"; exit 1; }
           VERSION="${RELEASE_TAG#v}"
           CODE=$(( BASH_REMATCH[1]*10000 + BASH_REMATCH[2]*100 + BASH_REMATCH[3] ))
           CURRENT_CODE="$(sed -n 's/^versionCode = "\([0-9]*\)"/\1/p' upstream/gradle/libs.versions.toml)"
@@ -334,7 +335,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           UPSTREAM_SHA: ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }}
-          PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease }}
+          PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease || endsWith(inputs.release_tag, '-beta') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -344,10 +345,15 @@ jobs:
           FP="$(tr -d ' \r\n' < leque/release-signing-cert.sha256)"
           SUM="$(cut -d' ' -f1 out/SHA256SUMS.txt)"
           {
-            echo "CloudXtream by Leque $RELEASE_TAG (signed release)."
+            if [[ "$RELEASE_TAG" == *-beta ]]; then
+              echo "CloudXtream by Leque $RELEASE_TAG: BETA for testing by the CloudXtream admin. It is not offered to users;"
+              echo "${RELEASE_TAG%-beta} is published to users after this beta is approved."
+            else
+              echo "CloudXtream by Leque $RELEASE_TAG (signed release)."
+            fi
             echo
             echo "- Package: \`com.leque.cloudstreamv5\` (installs alongside debug previews)"
-            echo "- Android 8.0+ (API 26). Requires an activation PIN from the owner."
+            echo "- Android 6.0+. Requires an activation PIN from the CloudXtream admin."
             echo "- Built from official CloudStream \`$UPSTREAM_SHA\` + Leque patches (\`$GITHUB_SHA\`)."
             echo "- APK SHA-256: \`$SUM\`"
             echo "- Signing certificate SHA-256: \`$FP\`"
