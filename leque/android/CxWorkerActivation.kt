@@ -65,7 +65,7 @@ object CxWorkerActivation {
             is UnknownHostException -> "DNS_UNREACHABLE"
             is SocketTimeoutException -> "NETWORK_TIMEOUT"
             is ConnectException -> "CONNECTION_FAILED"
-            is SSLException -> "TLS_ERROR"
+            is SSLException -> tlsKind(e)
             is java.security.GeneralSecurityException -> "KEYSTORE_${e.javaClass.simpleName}"
             else -> e.javaClass.simpleName.take(48)
         }
@@ -73,6 +73,18 @@ object CxWorkerActivation {
         lastErrorCode=(e as? ApiProblem)?.code
         lastErrorBody=(e as? ApiProblem)?.body
         android.util.Log.w("CxDeviceActivation","Failed "+stage+" ("+kind+")")
+    }
+
+    /** TLS_CLOCK: the device date is wrong; TLS_UNTRUSTED: certificate not trusted; else TLS_ERROR. */
+    private fun tlsKind(e: Exception): String {
+        var cause: Throwable? = e
+        while (cause != null) {
+            if (cause is java.security.cert.CertificateExpiredException ||
+                cause is java.security.cert.CertificateNotYetValidException) return "TLS_CLOCK"
+            if (cause is java.security.cert.CertPathValidatorException) return "TLS_UNTRUSTED"
+            cause = cause.cause
+        }
+        return "TLS_ERROR"
     }
 
     fun hasFreshCheck(): Boolean = SystemClock.elapsedRealtime() < checkedUntilElapsed
@@ -179,6 +191,7 @@ object CxWorkerActivation {
 
     private fun request(method: String,path: String,data: JSONObject? = null,bearer: String? = null): JSONObject {
         val connection=(URL(origin()+path).openConnection() as HttpsURLConnection).apply {
+            CxTls.apply(this)
             requestMethod=method
             connectTimeout=8000
             readTimeout=8000

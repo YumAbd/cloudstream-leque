@@ -133,6 +133,25 @@ class CxActivationActivity : AppCompatActivity() {
         else -> null
     }
 
+    /**
+     * Network problems before the server could answer. A wrong device date is the usual cause of
+     * TLS errors on TV boxes, so it is checked first: any date before this build is certainly wrong.
+     */
+    private fun connectionReason():String? {
+        val kind=CxWorkerActivation.lastActivationProblem().substringAfter(':',"")
+        val clockWrong=System.currentTimeMillis()<1793491200000L // 1 Nov 2026
+        if(kind.startsWith("TLS")&&(clockWrong||kind=="TLS_CLOCK"))
+            return "Tarikh & masa peranti TIDAK BETUL ("+date(System.currentTimeMillis())+"). Buka Tetapan → Tarikh & masa, "+
+                "hidupkan tarikh & masa automatik (atau tetapkan tarikh hari ini), kemudian cuba lagi."
+        return when {
+            kind.startsWith("TLS") -> "Sambungan selamat ke server CloudXtream GAGAL ("+kind+"). Semak tarikh & masa peranti, "+
+                "matikan VPN/DNS peribadi, atau cuba rangkaian lain (contoh hotspot telefon). Jika masih gagal, hubungi admin CloudXtream."
+            kind=="DNS_UNREACHABLE" -> "Server CloudXtream tidak dapat dicari. Semak sambungan Internet, matikan VPN/DNS peribadi, atau cuba rangkaian lain."
+            kind=="NETWORK_TIMEOUT"||kind=="CONNECTION_FAILED" -> "Tiada sambungan ke server CloudXtream. Semak Internet dan cuba lagi."
+            else -> null
+        }
+    }
+
     private fun date(ms:Long):String =
         if(ms<=0L)"—" else java.text.SimpleDateFormat("d MMM yyyy, HH:mm",Locale("ms")).format(java.util.Date(ms))
 
@@ -175,7 +194,7 @@ class CxActivationActivity : AppCompatActivity() {
                 setBusy(false)
                 val expired=CxWorkerActivation.licenseExpiresMs(this@CxActivationActivity)
                     ?.let { it<=System.currentTimeMillis() }==true
-                status.text=reason(CxWorkerActivation.lastServerError())
+                status.text=(reason(CxWorkerActivation.lastServerError()) ?: connectionReason())
                     ?: if(expired)"Lesen anda telah tamat tempoh. Hubungi admin CloudXtream untuk menyambungnya, kemudian tekan Cuba semak semula."
                     else "Semakan dalam talian gagal ("+CxWorkerActivation.lastActivationProblem()+
                     "). Semak Internet, atau minta admin CloudXtream beri PIN baharu."
@@ -201,7 +220,7 @@ class CxActivationActivity : AppCompatActivity() {
                     "Peranti TELAH didaftarkan, tetapi semakan semula gagal ("+
                         CxWorkerActivation.lastActivationProblem()+
                         "). JANGAN minta PIN lain. Tekan Cuba semak semula."
-                else reason(CxWorkerActivation.lastServerError())
+                else (reason(CxWorkerActivation.lastServerError()) ?: connectionReason())
                     ?: ("Pengaktifan tidak berjaya ("+CxWorkerActivation.lastActivationProblem()+
                     "). Semak PIN dan Internet, atau hubungi admin CloudXtream.")
                 if(!CxWorkerActivation.isActivated(this@CxActivationActivity) &&

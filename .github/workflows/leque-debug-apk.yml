@@ -1,5 +1,5 @@
-name: Build CloudXtream preview APK (patches V5.0.19)
-run-name: CloudXtream preview (patches V5.0.19) on official CloudStream ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
+name: Build CloudXtream preview APK (patches V5.0.20)
+run-name: CloudXtream preview (patches V5.0.20) on official CloudStream ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
     branches: [apk-build]
@@ -124,6 +124,7 @@ jobs:
           python3 leque/default_subs_v5017.py upstream
           python3 leque/activation_reasons_v5018.py upstream
           python3 leque/admin_wording_v5019.py upstream
+          python3 leque/tls_roots_v5020.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           git -C upstream diff --check
@@ -143,7 +144,7 @@ jobs:
           mkdir -p out
           find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk \;
           test -s out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
-          git -C upstream diff --binary > out/CloudXtream-V5.0.19-ActivationFixPreview-source.patch
+          git -C upstream diff --binary > out/CloudXtream-V5.0.20-ActivationFixPreview-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
           sha256sum out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt

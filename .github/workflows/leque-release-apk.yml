@@ -189,6 +189,7 @@ jobs:
           python3 leque/default_subs_v5017.py upstream
           python3 leque/activation_reasons_v5018.py upstream
           python3 leque/admin_wording_v5019.py upstream
+          python3 leque/tls_roots_v5020.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           # The release tag sets the app version, so a new official CloudStream build can be

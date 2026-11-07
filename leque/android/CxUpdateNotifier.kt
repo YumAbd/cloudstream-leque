@@ -120,6 +120,7 @@ class CxUpdateNotifier(val context: Context, params: WorkerParameters) :
         val feed = try {
             withContext(Dispatchers.IO) {
                 val connection = URL(FEED).openConnection() as HttpsURLConnection
+                com.lagradost.cloudstream3.activation.CxTls.apply(connection)
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 15_000
                 connection.setRequestProperty("Accept", "application/json")
