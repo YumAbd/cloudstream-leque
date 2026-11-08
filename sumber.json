@@ -73,7 +73,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "CineMax21 \u2014 Streaming Movie and TV Series",
+    "description": "CineMax21 — Streaming Movie and TV Series",
     "fileSize": 241044,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -85,31 +85,6 @@
     "iconUrl": "https://klikxxi.me/wp-content/uploads/2024/02/cropped-site-icon.png",
     "apiVersion": 1,
     "fileHash": "sha256-7461defedc54efe1188a6a9732369b2b59185505f7e534c14a7aa5606d3fa6f2"
-  },
-  {
-    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/DailymotionProvider-6ca430fb7885.cs3",
-    "status": 1,
-    "version": 13,
-    "name": "DailymotionProvider",
-    "internalName": "DailymotionProvider",
-    "authors": [
-      "sad25kag"
-    ],
-    "description": "Dailymotion public video catalog with source-backed homepage, search, detail, and internal HLS playback resolver.",
-    "fileSize": 36356,
-    "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
-    "tvTypes": [
-      "Movie",
-      "TvSeries",
-      "AsianDrama",
-      "Anime",
-      "AnimeMovie",
-      "Cartoon",
-      "Others"
-    ],
-    "iconUrl": "https://www.google.com/s2/favicons?domain=www.dailymotion.com&sz=%size%",
-    "apiVersion": 1,
-    "fileHash": "sha256-6ca430fb78857092bb5f626f388caa2562bbb653b942bebf22d0a057597435ad"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Donghuastream-558fc73d686c.cs3",
@@ -185,7 +160,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "Dubbindo \u2014 status terbatas: provider masih dapat memuat sebagian link, tetapi banyak konten di website sumber sedang processing/mati, poster kosong, atau media tidak dapat diputar.",
+    "description": "Dubbindo — status terbatas: provider masih dapat memuat sebagian link, tetapi banyak konten di website sumber sedang processing/mati, poster kosong, atau media tidak dapat diputar.",
     "fileSize": 35566,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -231,7 +206,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "HidoriStream \u2014 Streaming Anime Subtitle Indonesia",
+    "description": "HidoriStream — Streaming Anime Subtitle Indonesia",
     "fileSize": 58969,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -342,7 +317,7 @@
     "authors": [
       "sad25kag"
     ],
-    "description": "Kuronime \u2014 Streaming Anime Subtitle Indonesia",
+    "description": "Kuronime — Streaming Anime Subtitle Indonesia",
     "fileSize": 39462,
     "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
     "language": "id",
@@ -509,7 +484,7 @@
     "version": 1,
     "name": "Pencurimovie",
     "internalName": "Pencurimovie",
-    "description": "\ud83d\udcfa Streaming Movie and TV Series",
+    "description": "📺 Streaming Movie and TV Series",
     "authors": [
       "Phisher98",
       "Asm0d3usX"
@@ -552,7 +527,7 @@
     "version": 1,
     "name": "Dutamovie",
     "internalName": "Dutamovie",
-    "description": "\ud83d\udcfa Streaming Movie and TV Series",
+    "description": "📺 Streaming Movie and TV Series",
     "authors": [
       "Hexated",
       "Asm0d3usX"
@@ -574,7 +549,7 @@
     "version": 1,
     "name": "Indomax",
     "internalName": "Indomax",
-    "description": "\ud83d\udcfa Streaming Movie and TV Series",
+    "description": "📺 Streaming Movie and TV Series",
     "authors": [
       "Asm0d3usX"
     ],
@@ -595,7 +570,7 @@
     "version": 1,
     "name": "Ngefilm",
     "internalName": "Ngefilm",
-    "description": "\ud83d\udcfa Streaming Movie and TV Series",
+    "description": "📺 Streaming Movie and TV Series",
     "authors": [
       "Asm0d3usX"
     ],
