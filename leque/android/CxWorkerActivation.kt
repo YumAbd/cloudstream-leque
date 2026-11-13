@@ -1,4 +1,5 @@
-// CloudXtream licensed-activation preview; online verification lease follows the server (currently 300 s).
+// CloudXtream licensed-activation; online verification lease follows the server (24 hours since V5.0.21),
+// kept across app restarts so a device contacts the server about once a day.
 // Cryptographic private key never leaves Android Keystore.
 package com.lagradost.cloudstream3.activation
 
@@ -40,7 +41,9 @@ object CxWorkerActivation {
     private const val MAX_RESPONSE = 16384
     // Server lease (revalidate_in) is clamped locally so a bad response cannot extend it.
     private const val MIN_LEASE_SECONDS = 30L
-    private const val MAX_LEASE_SECONDS = 600L
+    private const val MAX_LEASE_SECONDS = 86_400L
+    private const val VERIFIED_AT = "verified_at_ms"
+    private const val VERIFIED_UNTIL = "verified_until_ms"
     // Set from private build configuration after deploying Cloudflare Workers.
     // Never use a domain from an untrusted intent or editable user preference.
     private const val SERVER_ORIGIN = "https://cloudxpanel.infopc.xyz"
@@ -87,10 +90,40 @@ object CxWorkerActivation {
         return "TLS_ERROR"
     }
 
-    fun hasFreshCheck(): Boolean = SystemClock.elapsedRealtime() < checkedUntilElapsed
+    fun hasFreshCheck(): Boolean { restoreLease(); return SystemClock.elapsedRealtime() < checkedUntilElapsed }
     /** True when the lease ends within [withinMs]; periodic checks only call the server then. */
-    fun needsRenewal(withinMs: Long): Boolean =
-        SystemClock.elapsedRealtime()+withinMs >= checkedUntilElapsed
+    fun needsRenewal(withinMs: Long): Boolean {
+        restoreLease()
+        return SystemClock.elapsedRealtime()+withinMs >= checkedUntilElapsed
+    }
+
+    /**
+     * After an app restart, the last successful check still counts until its lease ends, so the
+     * server is contacted about once a day. A clock moved backwards (or too far ahead of the
+     * recorded check) invalidates it and the app checks online again.
+     */
+    @Volatile private var restored = false
+    private fun restoreLease() {
+        if (restored || checkedUntilElapsed > 0L) return
+        restored = true
+        val context = com.lagradost.cloudstream3.CloudStreamApp.context ?: return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.contains(DEVICE_ID)) return
+        val at = prefs.getLong(VERIFIED_AT, 0L)
+        val until = prefs.getLong(VERIFIED_UNTIL, 0L)
+        val now = System.currentTimeMillis()
+        if (at <= 0L || now < at - 60_000L || now >= until || until - at > MAX_LEASE_SECONDS * 1000L) return
+        checkedUntilElapsed = SystemClock.elapsedRealtime() + (until - now)
+    }
+    private fun saveLease(context: Context, leaseMs: Long) {
+        val now = System.currentTimeMillis()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(VERIFIED_AT, now).putLong(VERIFIED_UNTIL, now + leaseMs).apply()
+    }
+    private fun clearLease() {
+        com.lagradost.cloudstream3.CloudStreamApp.context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            ?.edit()?.remove(VERIFIED_AT)?.remove(VERIFIED_UNTIL)?.apply()
+    }
 
     private fun leaseMillis(response: JSONObject): Long {
         val seconds=response.optLong("revalidate_in",60L).coerceIn(MIN_LEASE_SECONDS,MAX_LEASE_SECONDS)
@@ -132,7 +165,8 @@ object CxWorkerActivation {
 
     /** Used only when the owner has reset the previous device and issued a fresh PIN. */
     fun clearStoredDeviceIdForReactivation(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(DEVICE_ID).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(DEVICE_ID)
+            .remove(VERIFIED_AT).remove(VERIFIED_UNTIL).apply()
         checkedUntilElapsed=0L
         adminUntilElapsed=0L
         adminToken=null
@@ -295,7 +329,9 @@ object CxWorkerActivation {
                 return@withContext failClosed()
             }
             // A verified state is intentionally process-local and short-lived.
-            checkedUntilElapsed=SystemClock.elapsedRealtime()+leaseMillis(valid)
+            val lease=leaseMillis(valid)
+            checkedUntilElapsed=SystemClock.elapsedRealtime()+lease
+            saveLease(context,lease)
             applyProfileName(context,valid.optString("display_name",""))
             // Last known license expiry (none = -1), used for the reminder notification.
             context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
@@ -340,6 +376,7 @@ object CxWorkerActivation {
 
     private fun failClosed(): Boolean {
         checkedUntilElapsed=0L
+        clearLease()
         adminUntilElapsed=0L
         adminToken=null
         return false

@@ -185,6 +185,8 @@ class CxActivationActivity : AppCompatActivity() {
 
     private fun verifyExisting(){
         if(busy)return
+        // Checked online within the last day: open at once, without contacting the server.
+        if(CxWorkerActivation.hasFreshCheck()){ enterApp(); return }
         setBusy(true)
         status.text="Menyemak peranti anda dengan CloudXtream…"
         lifecycleScope.launch {
