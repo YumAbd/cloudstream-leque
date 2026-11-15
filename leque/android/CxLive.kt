@@ -38,8 +38,10 @@ data class LiveSource(
     val text: String? = null,
     val path: String? = null,
     val own: Boolean = false,
+    /** "tv" (Live TV menu) or "radio" (Radio menu). */
+    val media: String = "tv",
 ) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("kind", kind).put("url", url)
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("kind", kind).put("media", media).put("url", url)
         .put("server", server).put("username", username).put("password", password).put("text", text)
         .put("path", path).put("own", own)
 
@@ -47,7 +49,7 @@ data class LiveSource(
         fun fromJson(o: JSONObject, own: Boolean) = LiveSource(
             id = o.optString("id"), name = o.optString("name"), kind = o.optString("kind"),
             url = o.str("url"), server = o.str("server"), username = o.str("username"), password = o.str("password"),
-            text = o.str("text"), path = o.str("path"), own = own,
+            text = o.str("text"), path = o.str("path"), own = own, media = if (o.optString("media") == "radio") "radio" else "tv",
         )
         private fun JSONObject.str(k: String) = if (isNull(k)) null else optString(k).takeIf { it.isNotEmpty() }
     }
@@ -115,18 +117,19 @@ object CxLive {
     private fun writeList(context: Context, key: String, list: List<LiveChannel>) =
         prefs(context).edit().putString(key, JSONArray(list.map(::channelJson)).toString()).apply()
 
-    fun favourites(context: Context) = readList(context, "favourites")
-    fun isFavourite(context: Context, c: LiveChannel) = favourites(context).any { it.key == c.key }
+    // [scope]: "" for Live TV, "radio" for Radio (kept apart).
+    fun favourites(context: Context, scope: String = "") = readList(context, "favourites$scope")
+    fun favouriteKeys(context: Context, scope: String = "") = favourites(context, scope).map { it.key }.toHashSet()
     /** Adds or removes; returns true when it is now a favourite. */
-    fun toggleFavourite(context: Context, c: LiveChannel): Boolean {
-        val list = favourites(context)
+    fun toggleFavourite(context: Context, c: LiveChannel, scope: String = ""): Boolean {
+        val list = favourites(context, scope)
         val now = list.none { it.key == c.key }
-        writeList(context, "favourites", if (now) list + c else list.filter { it.key != c.key })
+        writeList(context, "favourites$scope", if (now) list + c else list.filter { it.key != c.key })
         return now
     }
-    fun recent(context: Context) = readList(context, "recent")
-    fun addRecent(context: Context, c: LiveChannel) =
-        writeList(context, "recent", (listOf(c) + recent(context).filter { it.key != c.key }).take(30))
+    fun recent(context: Context, scope: String = "") = readList(context, "recent$scope")
+    fun addRecent(context: Context, c: LiveChannel, scope: String = "") =
+        writeList(context, "recent$scope", (listOf(c) + recent(context, scope).filter { it.key != c.key }).take(30))
 
     // ---------------- channels ----------------
     private fun cacheFile(context: Context, id: String) =
@@ -134,6 +137,9 @@ object CxLive {
     private fun sha(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
 
     /** Channels of a source; cached for 12 hours (playlist links and Xtream are downloaded again after that). */
+    /** Radio stations of Malaysia from Radio Browser (a public directory of stations' own streams). */
+    val RADIO_MALAYSIA = LiveSource("radio-browser-my", "Radio Malaysia", "radio_browser", media = "radio")
+
     suspend fun channels(context: Context, source: LiveSource, fresh: Boolean): List<LiveChannel> {
         if (source.kind == "m3u_text") return parseM3u(source.text.orEmpty())
         if (source.kind == "file") return parseM3u(source.path?.let { File(it).takeIf(File::isFile)?.readText() }.orEmpty())
@@ -145,6 +151,7 @@ object CxLive {
         return try {
             val list = when (source.kind) {
                 "xtream" -> xtream(source.server.orEmpty(), source.username.orEmpty(), source.password.orEmpty())
+                "radio_browser" -> radioBrowser("MY")
                 else -> fromLink(source.url.orEmpty())
             }
             cache.writeText(JSONArray(list.map(::channelJson)).toString())
@@ -223,6 +230,26 @@ object CxLive {
                 group = names[s.optString("category_id")]?.takeIf { it.isNotBlank() } ?: "Lain-lain",
             )
         }.also { if (it.isEmpty()) throw LiveProblem("Akaun Xtream ini tiada saluran live.") }
+    }
+
+    /** Working stations of a country, most voted first; grouped by state (or "Malaysia"). */
+    suspend fun radioBrowser(country: String): List<LiveChannel> {
+        val text = try {
+            app.get("https://de1.api.radio-browser.info/json/stations/search?countrycode=$country&hidebroken=true&order=votes&reverse=true&limit=400",
+                headers = mapOf("User-Agent" to "CloudXtream/1.0"), timeout = 60L).text
+        } catch (e: Exception) {
+            app.get("https://all.api.radio-browser.info/json/stations/search?countrycode=$country&hidebroken=true&order=votes&reverse=true&limit=400",
+                headers = mapOf("User-Agent" to "CloudXtream/1.0"), timeout = 60L).text
+        }
+        val a = JSONArray(text)
+        val seen = HashSet<String>()
+        return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull { o ->
+            val url = o.optString("url_resolved").ifBlank { o.optString("url") }
+            val name = o.optString("name").trim()
+            if (!url.startsWith("http") || name.isEmpty() || !seen.add(name.lowercase())) return@mapNotNull null
+            LiveChannel(name, url, o.optString("favicon").takeIf { it.startsWith("http") },
+                o.optString("state").trim().ifEmpty { "Malaysia" })
+        }.also { if (it.isEmpty()) throw LiveProblem("Tiada stesen radio ditemui.") }
     }
 
     private val attr = Regex("""([A-Za-z0-9_-]+)="([^"]*)"""")
