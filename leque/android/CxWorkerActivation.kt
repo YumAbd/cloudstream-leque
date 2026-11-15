@@ -1,5 +1,6 @@
-// CloudXtream licensed-activation; online verification lease follows the server (24 hours since V5.0.21),
-// kept across app restarts so a device contacts the server about once a day.
+// CloudXtream licensed-activation. Since V5.0.22 a PIN is entered once: an activated device stays
+// activated (no license checks) until the app is uninstalled. A reinstall on the same phone/TV takes
+// back its device slot with the same PIN (the server matches a hash of the Android ID).
 // Cryptographic private key never leaves Android Keystore.
 package com.lagradost.cloudstream3.activation
 
@@ -44,6 +45,7 @@ object CxWorkerActivation {
     private const val MAX_LEASE_SECONDS = 86_400L
     private const val VERIFIED_AT = "verified_at_ms"
     private const val VERIFIED_UNTIL = "verified_until_ms"
+    private const val HARDWARE_SENT = "hardware_registered_v1"
     // Set from private build configuration after deploying Cloudflare Workers.
     // Never use a domain from an untrusted intent or editable user preference.
     private const val SERVER_ORIGIN = "https://cloudxpanel.infopc.xyz"
@@ -90,11 +92,52 @@ object CxWorkerActivation {
         return "TLS_ERROR"
     }
 
-    fun hasFreshCheck(): Boolean { restoreLease(); return SystemClock.elapsedRealtime() < checkedUntilElapsed }
-    /** True when the lease ends within [withinMs]; periodic checks only call the server then. */
-    fun needsRenewal(withinMs: Long): Boolean {
-        restoreLease()
-        return SystemClock.elapsedRealtime()+withinMs >= checkedUntilElapsed
+    /** An activated device is always allowed: the license is not checked again (V5.0.22). */
+    fun hasFreshCheck(): Boolean {
+        val context = com.lagradost.cloudstream3.CloudStreamApp.context ?: return false
+        return isActivated(context)
+    }
+    /** Never: periodic license checks ended in V5.0.22. */
+    @Suppress("UNUSED_PARAMETER")
+    fun needsRenewal(withinMs: Long): Boolean = false
+
+    /**
+     * SHA-256 of this phone/TV's Android ID. It stays the same after the app is uninstalled and
+     * installed again (same signing key), so the server can give a reinstall its old device slot.
+     */
+    private fun hardwareId(context: Context): String? = try {
+        val id = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+        if (id.isNullOrBlank() || id == "9774d56d682e549c") null
+        else java.security.MessageDigest.getInstance("SHA-256")
+            .digest(("cloudxtream-hardware:" + id).toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) { null }
+
+    /**
+     * Devices activated before V5.0.22 send their hardware id once (a signed check), so they can
+     * also be reinstalled with their PIN. The answer never locks the app.
+     */
+    suspend fun registerHardwareOnce(context: Context) = withContext(Dispatchers.IO) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(HARDWARE_SENT, false)) return@withContext
+        val deviceId = prefs.getString(DEVICE_ID, null) ?: return@withContext
+        val hardware = hardwareId(context) ?: return@withContext
+        try {
+            val challenge = post("/api/device/challenge", JSONObject().put("purpose", "verify").put("device_id", deviceId))
+            val challengeId = challenge.getString("challenge_id")
+            val nonce = challenge.getString("nonce")
+            val proof = sign("CX-VERIFY\n$deviceId\n$challengeId\n$nonce")
+            val valid = post("/api/device/verify", JSONObject()
+                .put("device_id", deviceId).put("challenge_id", challengeId).put("signature", proof)
+                .put("signature_scheme", SIGNATURE_SCHEME).put("hardware_id", hardware))
+            if (valid.optBoolean("authorized", false)) applyProfileName(context, valid.optString("display_name", ""))
+            prefs.edit().putBoolean(HARDWARE_SENT, true).apply()
+        } catch (e: ApiProblem) {
+            // Refused (e.g. the owner removed this device): nothing to register; never ask again.
+            prefs.edit().putBoolean(HARDWARE_SENT, true).apply()
+        } catch (e: Exception) {
+            android.util.Log.w("CxDeviceActivation", "Hardware id not sent yet (" + e.javaClass.simpleName + ")")
+        }
     }
 
     /**
@@ -268,11 +311,8 @@ object CxWorkerActivation {
         return (if(model.startsWith(maker,ignoreCase=true)) model else "$maker $model").trim().take(60)
     }
 
-    /**
-     * Use once on initial install, then call validateOnline before opening Home.
-     * [replaceDeviceId]: when the license is full, the device (from the server's list) this one replaces.
-     */
-    suspend fun activate(context: Context, pin: String, replaceDeviceId: String? = null): Boolean = withContext(Dispatchers.IO) {
+    /** Once per install. Replacing another device is only done by the owner (V5.0.22). */
+    suspend fun activate(context: Context, pin: String): Boolean = withContext(Dispatchers.IO) {
         var stage="challenge"
         try {
             lastProblem="none"
@@ -291,14 +331,17 @@ object CxWorkerActivation {
                 .put("signature",proof)
                 .put("signature_scheme",SIGNATURE_SCHEME)
                 .put("device_label",deviceLabel())
-                .apply { if(replaceDeviceId!=null)put("replace_device_id",replaceDeviceId) }
+                .apply { hardwareId(context)?.let { put("hardware_id",it) } }
                 .put("pin",pin))
             val deviceId=response.getString("device_id")
             // Only a public identifier is persisted; no static device or admin bearer token.
+            // The hardware id was sent with the activation, so it never needs registering again.
             context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-                .edit().putString(DEVICE_ID,deviceId).apply()
-            stage="verify_registered_device"
-            return@withContext validateOnline(context)
+                .edit().putString(DEVICE_ID,deviceId).putBoolean(HARDWARE_SENT,true)
+                .putLong("activated_at_ms",System.currentTimeMillis()).apply()
+            applyProfileName(context,response.optString("display_name",""))
+            lastProblem="none"
+            return@withContext true
         } catch(e:Exception) {
             recordProblem(stage,e)
             checkedUntilElapsed=0L
@@ -347,9 +390,9 @@ object CxWorkerActivation {
         }
     }
 
-    /** License expiry from the last successful online check, or null when it never expires. */
-    fun licenseExpiresMs(context: Context): Long? =
-        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getLong(LICENSE_EXPIRES,-1L).takeIf { it > 0L }
+    /** No expiry reminders: the license is not checked after activation (V5.0.22). */
+    @Suppress("UNUSED_PARAMETER")
+    fun licenseExpiresMs(context: Context): Long? = null
 
     /** "Report a problem" from the player; signed by this device like an online check. */
     suspend fun reportProblem(context: Context, title: String, source: String, detail: String, appVersion: String): Boolean =

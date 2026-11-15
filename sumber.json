@@ -19,7 +19,8 @@
     ],
     "iconUrl": "https://cloudstream.zvlz.my.id/icon/alqanime.png",
     "apiVersion": 1,
-    "fileHash": "sha256-9eb1014f29387d50b375ed813f13e3d0eee671fbde9b5fbba556768f1c2ba42d"
+    "fileHash": "sha256-9eb1014f29387d50b375ed813f13e3d0eee671fbde9b5fbba556768f1c2ba42d",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/AnimeIndo-5cbcc9352444.cs3",
@@ -41,7 +42,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://anime-indo.lol&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-5cbcc9352444c7b6b0aeef6a899a072046feeb2339064a18fa1691de0a15f331"
+    "fileHash": "sha256-5cbcc9352444c7b6b0aeef6a899a072046feeb2339064a18fa1691de0a15f331",
+    "summary": "Anime & Anime Movies (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Astronime-671ddc27ae27.cs3",
@@ -62,7 +64,8 @@
       "OVA"
     ],
     "apiVersion": 1,
-    "fileHash": "sha256-671ddc27ae27caadc94adbbfd9bd0eaaa697cfd1e52863c0828dac8807cf5e82"
+    "fileHash": "sha256-671ddc27ae27caadc94adbbfd9bd0eaaa697cfd1e52863c0828dac8807cf5e82",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Cinemax21Provider-7461defedc54.cs3",
@@ -84,7 +87,8 @@
     ],
     "iconUrl": "https://klikxxi.me/wp-content/uploads/2024/02/cropped-site-icon.png",
     "apiVersion": 1,
-    "fileHash": "sha256-7461defedc54efe1188a6a9732369b2b59185505f7e534c14a7aa5606d3fa6f2"
+    "fileHash": "sha256-7461defedc54efe1188a6a9732369b2b59185505f7e534c14a7aa5606d3fa6f2",
+    "summary": "Movies, TV Series & Drama Asia"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Donghuastream-558fc73d686c.cs3",
@@ -105,7 +109,8 @@
     ],
     "iconUrl": "https://raw.githubusercontent.com/Kohi-den/extensions-source/927f9c68fd64ce52f6212ae633d0f0585eca3545/src/en/donghuastream/res/mipmap-xxxhdpi/ic_launcher.png",
     "apiVersion": 1,
-    "fileHash": "sha256-558fc73d686c1da05d82bd5198fa65a1efd966985fb657ed441c8b17ab140530"
+    "fileHash": "sha256-558fc73d686c1da05d82bd5198fa65a1efd966985fb657ed441c8b17ab140530",
+    "summary": "Donghua (anime China)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Donghub-47131c0c3771.cs3",
@@ -127,7 +132,8 @@
     ],
     "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://donghub.vip&size=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-47131c0c37716bdcfc0d422ba7865df6caeadf082d336600f81e66a56fb9ce8c"
+    "fileHash": "sha256-47131c0c37716bdcfc0d422ba7865df6caeadf082d336600f81e66a56fb9ce8c",
+    "summary": "Donghua (anime China)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/DracinSI-5042c6fb117a.cs3",
@@ -149,7 +155,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=dramacinasubindo.com&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-5042c6fb117a293a4835be5f1d30bdb8dc79c96adb8bc83bd7e4fd3f4747afff"
+    "fileHash": "sha256-5042c6fb117a293a4835be5f1d30bdb8dc79c96adb8bc83bd7e4fd3f4747afff",
+    "summary": "Cdrama (drama China, sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/DubbindoProvider-d522da93a5b3.cs3",
@@ -173,7 +180,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=www.dubbindo.site&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-d522da93a5b35fc4f038cc08238485b8e988b1fa20d3de80690301a7bd15e0fa"
+    "fileHash": "sha256-d522da93a5b35fc4f038cc08238485b8e988b1fa20d3de80690301a7bd15e0fa",
+    "summary": "Movies, TV Series & Anime (alih suara Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/FreeReels-979bc585e5fa.cs3",
@@ -195,7 +203,8 @@
     ],
     "iconUrl": "https://free-reels.com/free-reels.png",
     "apiVersion": 1,
-    "fileHash": "sha256-979bc585e5fad6040ab7fa981b137ad97144defeb2157cef8280762d87f70d99"
+    "fileHash": "sha256-979bc585e5fad6040ab7fa981b137ad97144defeb2157cef8280762d87f70d99",
+    "summary": "Drama pendek (short drama)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/HidoriStreamProvider-2552f830129c.cs3",
@@ -217,7 +226,8 @@
     ],
     "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://v8.hidoristream.online&size=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-2552f830129c2f23d528da0e3c375bac71e410e8204bfec5e469b96410a99b36"
+    "fileHash": "sha256-2552f830129c2f23d528da0e3c375bac71e410e8204bfec5e469b96410a99b36",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/IdlixProvider-ca8868087e3f.cs3",
@@ -240,7 +250,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=z2.idlixku.com&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-ca8868087e3fd7f9014aa4bcd9fb3283fb68bd703a4f66dec623f6715ea57286"
+    "fileHash": "sha256-ca8868087e3fd7f9014aa4bcd9fb3283fb68bd703a4f66dec623f6715ea57286",
+    "summary": "Movies, TV Series, Anime & Drama Asia"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/JuraganFilm-4f294d9987c5.cs3",
@@ -263,7 +274,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=tv45.juragan.film&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-4f294d9987c5f222c104518581209704a5bd7b0a29689f86bdc716c8f0354cd5"
+    "fileHash": "sha256-4f294d9987c5f222c104518581209704a5bd7b0a29689f86bdc716c8f0354cd5",
+    "summary": "Movies, TV Series & Drama Asia"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KikoNime-02e7212169bd.cs3",
@@ -285,7 +297,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=kikonime.com&sz=128",
     "apiVersion": 1,
-    "fileHash": "sha256-02e7212169bd010b1d9fcb6c078b87b01218be8971c18b1b35a4566b9614eaac"
+    "fileHash": "sha256-02e7212169bd010b1d9fcb6c078b87b01218be8971c18b1b35a4566b9614eaac",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KuramanimeProvider-949218cd4f1c.cs3",
@@ -306,7 +319,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=kuramanime.com&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-949218cd4f1c1f0e51c1ea8d09cd1aefe07f031a56500b9c3fdd0d50b236f418"
+    "fileHash": "sha256-949218cd4f1c1f0e51c1ea8d09cd1aefe07f031a56500b9c3fdd0d50b236f418",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KuronimeProvider-3dd02365736f.cs3",
@@ -328,7 +342,8 @@
     ],
     "iconUrl": "https://play-lh.googleusercontent.com/EFMkS1T-8txjLFIl9QxjcTRLa7a7Muv08C04b7ongYgodoY_b2T3GpxzGAQEx-eitfQ=w256",
     "apiVersion": 1,
-    "fileHash": "sha256-3dd02365736fe45b72cdce98bd165129c97c71f0b29df8135c675bfcd784d98b"
+    "fileHash": "sha256-3dd02365736fe45b72cdce98bd165129c97c71f0b29df8135c675bfcd784d98b",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/OtakudesuProvider-15fd2b6a132e.cs3",
@@ -350,7 +365,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=otakudesu.blog&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-15fd2b6a132edf0122c18283b3d1fc5991581c01f3a5282203269bbfa0f42518"
+    "fileHash": "sha256-15fd2b6a132edf0122c18283b3d1fc5991581c01f3a5282203269bbfa0f42518",
+    "summary": "Anime (sari kata Indonesia)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/YouTube-6b7a25a5cf53.cs3",
@@ -370,7 +386,8 @@
     ],
     "iconUrl": "https://www.youtube.com/s/desktop/711fd789/img/logos/favicon_144x144.png",
     "apiVersion": 1,
-    "fileHash": "sha256-6b7a25a5cf537682ba62e9a86a3909257dbec97a7d261d42dd461931e535c390"
+    "fileHash": "sha256-6b7a25a5cf537682ba62e9a86a3909257dbec97a7d261d42dd461931e535c390",
+    "summary": "Video YouTube"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Chikianimation-463cd68d874e.cs3",
@@ -391,7 +408,8 @@
     ],
     "iconUrl": "https://chikianimation.com/wp-content/uploads/2026/03/logo.png",
     "apiVersion": 1,
-    "fileHash": "sha256-463cd68d874eaaab02636de6180e4fc9f564451c3478454c98d54e621930c0e1"
+    "fileHash": "sha256-463cd68d874eaaab02636de6180e4fc9f564451c3478454c98d54e621930c0e1",
+    "summary": "Donghua (anime China)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/KisskhProvider-596cda263fee.cs3",
@@ -413,7 +431,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=kisskh.co&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-596cda263feeef775548970606bfbc4f61c49fe08025e19588551989c61cc86c"
+    "fileHash": "sha256-596cda263feeef775548970606bfbc4f61c49fe08025e19588551989c61cc86c",
+    "summary": "Kdrama, Cdrama, Kmovies & Anime"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/LayarKacaProvider-db0c8643377a.cs3",
@@ -434,7 +453,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=d21.team&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-db0c8643377a03fbed0c7553fb93e863f3f170e06c8cfec348f5ce989c8c3b93"
+    "fileHash": "sha256-db0c8643377a03fbed0c7553fb93e863f3f170e06c8cfec348f5ce989c8c3b93",
+    "summary": "Movies, TV Series & Drama Asia"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/MovieBoxProvider-7fc9c67543a6.cs3",
@@ -455,7 +475,8 @@
     ],
     "iconUrl": "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/Icons/moviebox.png",
     "apiVersion": 1,
-    "fileHash": "sha256-7fc9c67543a684dded6a0291ce2cf758cd414917fda44575a8b23d0ed5431ec1"
+    "fileHash": "sha256-7fc9c67543a684dded6a0291ce2cf758cd414917fda44575a8b23d0ed5431ec1",
+    "summary": "Movies & TV Series"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Animekhor-5822fff54a3d.cs3",
@@ -476,7 +497,8 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=animekhor.org&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-5822fff54a3d61af1013ccd5271f929a3d4f663ec7ff35e41f671c3102c1f25a"
+    "fileHash": "sha256-5822fff54a3d61af1013ccd5271f929a3d4f663ec7ff35e41f671c3102c1f25a",
+    "summary": "Donghua (anime China)"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pencurimovie-21060e44e733.cs3",
@@ -498,7 +520,8 @@
     ],
     "iconUrl": "https://i.ibb.co.com/Y7dqMBrr/pencurimovie.png",
     "apiVersion": 1,
-    "fileHash": "sha256-21060e44e73398f189700f39d02fe238228a7c678a5732fd6f0171cea5ddef87"
+    "fileHash": "sha256-21060e44e73398f189700f39d02fe238228a7c678a5732fd6f0171cea5ddef87",
+    "summary": "Movies & TV Series"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pmsm-d145f3183448.cs3",
@@ -519,7 +542,8 @@
     ],
     "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://ww192.pencurimoviesubmalay.motorcycles&size=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253"
+    "fileHash": "sha256-d145f31834487e2fe511c14857b39475e107d44725f57f805b830765af196253",
+    "summary": "Movies & TV Series"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Dutamovie-602e9e7655cd.cs3",
@@ -541,7 +565,8 @@
     ],
     "iconUrl": "https://i.ibb.co.com/SwTXWck9/dutamovie.png",
     "apiVersion": 1,
-    "fileHash": "sha256-602e9e7655cddf7ba9e2c5f61b4741920daec20bed2df3d770276fabd215da0c"
+    "fileHash": "sha256-602e9e7655cddf7ba9e2c5f61b4741920daec20bed2df3d770276fabd215da0c",
+    "summary": "Movies & TV Series"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Indomax-f5b4f2e37048.cs3",
@@ -562,7 +587,8 @@
     ],
     "iconUrl": "https://i.ibb.co.com/6cCQ1h87/indomax.jpg",
     "apiVersion": 1,
-    "fileHash": "sha256-f5b4f2e370485114cf775a6e0a21de3f53d3a6d3d177457222194590c1c66d54"
+    "fileHash": "sha256-f5b4f2e370485114cf775a6e0a21de3f53d3a6d3d177457222194590c1c66d54",
+    "summary": "Movies & TV Series"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Ngefilm-4641795e14b1.cs3",
@@ -583,7 +609,8 @@
     ],
     "iconUrl": "https://i.ibb.co.com/3yVG0DbY/ngefilm.png",
     "apiVersion": 1,
-    "fileHash": "sha256-4641795e14b16d53e1c9dc1ffe7d369d84757cb0e886c090b33b47da3d204d0d"
+    "fileHash": "sha256-4641795e14b16d53e1c9dc1ffe7d369d84757cb0e886c090b33b47da3d204d0d",
+    "summary": "Movies & TV Series"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Pornhub-f3047e694291.cs3",
@@ -665,7 +692,8 @@
     ],
     "iconUrl": "https://sflix.film/favicon.ico",
     "apiVersion": 1,
-    "fileHash": "sha256-e43429071f393c931421cf34a5c20663927e8b4a37828cb5d20dbf1467880d04"
+    "fileHash": "sha256-e43429071f393c931421cf34a5c20663927e8b4a37828cb5d20dbf1467880d04",
+    "summary": "Movies, TV Series, Anime & Drama Asia"
   },
   {
     "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Erome-74c8e9ced5f0.cs3",
@@ -787,5 +815,96 @@
     "iconUrl": "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://en.xchina.co/&size=128",
     "apiVersion": 1,
     "fileHash": "sha256-50360ecc7426f1a4c3990178933aa4dbaeb63e49304ff9149f7876838851bfd3"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/OppaDrama-9d56a2b36572.cs3",
+    "status": 1,
+    "version": 3,
+    "name": "OppaDrama",
+    "internalName": "OppaDrama",
+    "authors": [
+      "Aldry84"
+    ],
+    "description": "OppaDrama — Streaming Drama Korea, Movie and TV Series",
+    "fileSize": 92241,
+    "repositoryUrl": "https://github.com/bikinveo-hash/RepairPremium_Repo",
+    "language": "id",
+    "tvTypes": [
+      "AsianDrama",
+      "TvSeries",
+      "Movie"
+    ],
+    "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://oppa.biz&size=128",
+    "apiVersion": 1,
+    "fileHash": "sha256-9d56a2b36572e0af8744412dd51a4b1e29717b506774d1213e2d27dc2fa4d8dd",
+    "summary": "Kdrama & Kmovies (sari kata Indonesia)"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/OneTouchTV-1bd2f6a4c0a4.cs3",
+    "status": 1,
+    "version": 5,
+    "name": "OneTouchTV",
+    "internalName": "OneTouchTV",
+    "authors": [
+      "Phisher98"
+    ],
+    "description": "Asian Dramas",
+    "fileSize": 90899,
+    "repositoryUrl": "https://github.com/phisher98/cloudstream-extensions-phisher",
+    "language": "en",
+    "tvTypes": [
+      "AsianDrama",
+      "TvSeries"
+    ],
+    "iconUrl": "https://www.google.com/s2/favicons?domain=onetouchtv.xyz/&sz=%size%",
+    "apiVersion": 1,
+    "fileHash": "sha256-1bd2f6a4c0a4c38d0e73f58d7b9bba96b231aa7efc02e32a9de1fc46bb9fe9de",
+    "summary": "Drama Asia: Kdrama, Cdrama & lain-lain (sari kata Inggeris)"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/Kissasian-22283f6250d5.cs3",
+    "status": 1,
+    "version": 4,
+    "name": "Kissasian",
+    "internalName": "Kissasian",
+    "authors": [
+      "sad25kag"
+    ],
+    "description": "Kissasian",
+    "fileSize": 30845,
+    "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
+    "language": "id",
+    "tvTypes": [
+      "AsianDrama",
+      "TvSeries",
+      "Movie"
+    ],
+    "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://kissasian.cam&size=%size%",
+    "apiVersion": 1,
+    "fileHash": "sha256-22283f6250d5d45aa4dbb94224cb39550bfddcea4c649a2185ba530fb4bf1fa1",
+    "summary": "Kdrama, Cdrama & Kmovies"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/YumAbd/cloudstream-leque/apk-build/plugins/NontonDrakor-9fe4383f103d.cs3",
+    "status": 1,
+    "version": 6,
+    "name": "NontonDrakor",
+    "internalName": "NontonDrakor",
+    "authors": [
+      "sad25kag"
+    ],
+    "description": "Provider CloudStream untuk NontonDrakor / Drakor ID - film dan serial TV subtitle Indonesia.",
+    "fileSize": 55040,
+    "repositoryUrl": "https://github.com/sad25kag/BetbetMiro-Extension",
+    "language": "id",
+    "tvTypes": [
+      "AsianDrama",
+      "TvSeries",
+      "Movie"
+    ],
+    "iconUrl": "https://www.google.com/s2/favicons?domain=nonton.drakor-id.top&sz=%size%",
+    "apiVersion": 1,
+    "fileHash": "sha256-9fe4383f103d4da794b86a875255059640e4cd8b221124990ba0eb15dccb77a1",
+    "summary": "Kdrama & Kmovies (sari kata Indonesia)"
   }
 ]

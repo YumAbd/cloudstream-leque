@@ -14,7 +14,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.lagradost.cloudstream3.ui.account.AccountSelectActivity2
@@ -22,11 +21,11 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * First-launch and online lease gate. This Activity is not exported: only app
- * entrypoints can start it. Zero Internet means zero access; no offline grace.
+ * First-launch activation. This Activity is not exported: only app entrypoints can start it.
+ * Since V5.0.22 the PIN is entered once; an activated device opens the app directly, also offline.
+ * Uninstalling the app removes the activation: the same PIN activates it again on the same device.
  *
- * Device identity uses an Android Keystore RSA-PSS key, never a MAC address.
- * V5.0.4 is a preview; privileged settings and FCM update delivery are separate.
+ * Device identity uses an Android Keystore RSA key, never a MAC address.
  */
 class CxActivationActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -66,17 +65,17 @@ class CxActivationActivity : AppCompatActivity() {
         }
         root.addView(caption("CLOUDXTREAM",29f,Color.rgb(0,204,239)))
         root.addView(caption("by Leque",16f,Color.LTGRAY))
-        root.addView(caption("Aplikasi ini perlu diaktifkan dengan PIN daripada admin CloudXtream.\nSambungan Internet diperlukan.",15f,Color.WHITE))
+        root.addView(caption("Aplikasi ini perlu diaktifkan sekali dengan PIN daripada admin CloudXtream.\nSambungan Internet diperlukan semasa pengaktifan.",15f,Color.WHITE))
         status=caption("Menyemak pengaktifan…",14f,Color.rgb(175,209,227))
         root.addView(status)
         pin=EditText(this).apply {
-            hint="PIN pengaktifan (6 aksara)"
+            hint="PIN pengaktifan (8 aksara)"
             setSingleLine(true)
             gravity=Gravity.CENTER
             textSize=22f
             letterSpacing=0.18f
             inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-            filters=arrayOf(InputFilter.AllCaps(),InputFilter.LengthFilter(6))
+            filters=arrayOf(InputFilter.AllCaps(),InputFilter.LengthFilter(8))
             imeOptions=EditorInfo.IME_ACTION_DONE
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
@@ -88,7 +87,7 @@ class CxActivationActivity : AppCompatActivity() {
         changeDevice=button("Saya ada PIN baharu").also {
             root.addView(it,LinearLayout.LayoutParams(-1,dp(56)))
         }
-        val spacer=caption("PIN ada tempoh sah yang ditetapkan oleh admin CloudXtream.\nHubungi admin CloudXtream jika peranti perlu ditetapkan semula.",12f,Color.LTGRAY)
+        val spacer=caption("PIN hanya perlu dimasukkan sekali. Jika aplikasi dipadam dan dipasang semula, masukkan PIN yang sama.",12f,Color.LTGRAY)
         root.addView(spacer)
         outer.addView(root)
         setContentView(outer)
@@ -121,13 +120,13 @@ class CxActivationActivity : AppCompatActivity() {
     }
     /** Plain-language reason for a refused PIN or a device that lost access (server error codes). */
     private fun reason(code:String?):String? = when(code){
-        "pin_not_found","invalid_pin" -> "PIN tidak sah. Semak semula 6 aksara PIN, atau minta PIN daripada admin CloudXtream."
+        "pin_not_found","invalid_pin" -> "PIN tidak sah. Semak semula PIN (8 aksara), atau minta PIN daripada admin CloudXtream."
         "pin_expired" -> "PIN ini telah TAMAT TEMPOH. Sila hubungi admin CloudXtream untuk mendapatkan PIN baharu."
         "pin_replaced" -> "PIN ini telah digantikan dengan PIN yang lebih baharu. Sila guna PIN terkini daripada admin CloudXtream."
         "license_inactive" -> "Lesen anda sedang DIGANTUNG atau DIBATALKAN. Sila hubungi admin CloudXtream."
         "license_expired" -> "Lesen anda telah TAMAT TEMPOH. Hubungi admin CloudXtream untuk menyambungnya."
-        "device_revoked" -> "Peranti ini telah DIKELUARKAN daripada lesen (mungkin diganti dengan peranti lain). Tekan \"Saya ada PIN baharu\" dan masukkan PIN daripada admin CloudXtream."
-        "device_limit_reached" -> "Had peranti lesen ini sudah PENUH. Minta admin CloudXtream mengeluarkan peranti lama atau menambah had."
+        "device_revoked" -> "Pengaktifan peranti ini tidak lagi sah. Tekan \"Saya ada PIN baharu\" dan masukkan PIN daripada admin CloudXtream."
+        "device_limit_reached" -> "PIN ini sudah digunakan pada peranti lain. Hubungi admin CloudXtream."
         "device_not_found" -> "Peranti yang dipilih sudah tiada dalam lesen. Cuba aktifkan semula."
         "too_many_attempts" -> "Terlalu banyak percubaan. Tunggu 15 minit dan cuba lagi."
         else -> null
@@ -155,38 +154,17 @@ class CxActivationActivity : AppCompatActivity() {
     private fun date(ms:Long):String =
         if(ms<=0L)"—" else java.text.SimpleDateFormat("d MMM yyyy, HH:mm",Locale("ms")).format(java.util.Date(ms))
 
-    /** License full but the PIN is valid: let the user pick which of their devices this one replaces. */
-    private fun offerReplace(){
-        val body=CxWorkerActivation.lastServerErrorBody() ?: return
-        val list=body.optJSONArray("devices") ?: return
-        if(!body.optBoolean("can_replace") || list.length()==0) return
-        val ids=ArrayList<String>(); val labels=ArrayList<String>()
-        for(i in 0 until list.length()){
-            val d=list.optJSONObject(i) ?: continue
-            val id=d.optString("id").takeIf { it.isNotBlank() } ?: continue
-            val name=d.optString("label").takeIf { it.isNotBlank() && it!="null" } ?: ("Peranti "+id.take(8))
-            ids.add(id)
-            labels.add(name+"\nTerakhir digunakan: "+date(d.optLong("last_seen_ms",d.optLong("created_ms"))))
-        }
-        if(ids.isEmpty())return
-        AlertDialog.Builder(this)
-            .setTitle("Had peranti penuh ("+body.optInt("active_devices")+"/"+body.optInt("max_devices")+"). Pilih peranti untuk diganti:")
-            .setItems(labels.toTypedArray()){ _,which ->
-                AlertDialog.Builder(this)
-                    .setTitle("Ganti peranti?")
-                    .setMessage(labels[which].substringBefore("\n")+" akan dikeluarkan daripada lesen, dan peranti ini akan diaktifkan sebagai gantinya.")
-                    .setPositiveButton("Ganti"){ _,_ -> activate(ids[which]) }
-                    .setNegativeButton("Batal",null)
-                    .show()
-            }
-            .setNegativeButton("Batal",null)
-            .show()
-    }
-
     private fun verifyExisting(){
         if(busy)return
-        // Checked online within the last day: open at once, without contacting the server.
-        if(CxWorkerActivation.hasFreshCheck()){ enterApp(); return }
+        // Activated: open at once (no license check). Devices activated before V5.0.22 send their
+        // hardware id once in the background so a reinstall can reuse the same PIN.
+        if(CxWorkerActivation.hasFreshCheck()){
+            val app=applicationContext
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                CxWorkerActivation.registerHardwareOnce(app)
+            }
+            enterApp(); return
+        }
         setBusy(true)
         status.text="Menyemak peranti anda dengan CloudXtream…"
         lifecycleScope.launch {
@@ -203,17 +181,18 @@ class CxActivationActivity : AppCompatActivity() {
             }
         }
     }
-    private fun activate(replaceDeviceId:String?=null){
+    private fun activate(){
         if(busy)return
         val code=pin.text.toString().trim().uppercase(Locale.ROOT)
-        if(!Regex("^[A-Z2-7]{6}$").matches(code)){
-            status.text="Masukkan tepat 6 aksara (huruf A–Z dan nombor 2–7)."
+        // 8 characters; PINs issued before V5.0.22 have 6 and still work.
+        if(!Regex("^([A-Z2-7]{8}|[A-Z2-7]{6})$").matches(code)){
+            status.text="Masukkan 8 aksara PIN (huruf A–Z dan nombor 2–7)."
             return
         }
         setBusy(true)
         status.text="Sedang mengaktifkan. Pastikan Internet bersambung…"
         lifecycleScope.launch {
-            val ok=CxWorkerActivation.activate(this@CxActivationActivity,code,replaceDeviceId)
+            val ok=CxWorkerActivation.activate(this@CxActivationActivity,code)
             if(ok)enterApp()
             else {
                 setBusy(false)
@@ -225,11 +204,6 @@ class CxActivationActivity : AppCompatActivity() {
                 else (reason(CxWorkerActivation.lastServerError()) ?: connectionReason())
                     ?: ("Pengaktifan tidak berjaya ("+CxWorkerActivation.lastActivationProblem()+
                     "). Semak PIN dan Internet, atau hubungi admin CloudXtream.")
-                if(!CxWorkerActivation.isActivated(this@CxActivationActivity) &&
-                    CxWorkerActivation.lastServerError()=="device_limit_reached"){
-                    status.text="Had peranti lesen ini sudah PENUH. Pilih peranti lama untuk diganti, atau minta admin CloudXtream mengeluarkan peranti lama."
-                    offerReplace()
-                }
             }
         }
     }

@@ -17,7 +17,7 @@ def patch(path,before,after):
 patch("gradle/libs.versions.toml",'versionCode = "50017"','versionCode = "50018"')
 patch("gradle/libs.versions.toml",'versionName = "5.0.17"','versionName = "5.0.18"')
 base="app/src/main/java/com/lagradost/cloudstream3/activation/"
-for name,needle in (("CxWorkerActivation.kt",'put("replace_device_id",replaceDeviceId)'),
+for name,needle in (("CxWorkerActivation.kt",'put("device_label",deviceLabel())'),
                     ("CxActivationActivity.kt",'"pin_expired" ->')):
     if needle not in (ROOT/(base+name)).read_text(encoding="utf8"):
         sys.exit("FAIL: V5.0.18 "+name+" is missing the activation reasons")
