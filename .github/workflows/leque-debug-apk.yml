@@ -1,5 +1,5 @@
-name: Build CloudXtream preview APK (patches V5.0.20)
-run-name: CloudXtream preview (patches V5.0.20) on official CloudStream ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
+name: Build CloudXtream preview APK (test build, not a release)
+run-name: CloudXtream preview from ${{ github.ref_name }} on official CloudStream ${{ inputs.upstream_sha || '5024ace2922a148d38df2a816b483b529789cf58' }} - event ${{ inputs.maintenance_event_id || 'manual' }}
 on:
   push:
     branches: [apk-build]
@@ -146,11 +146,11 @@ jobs:
       - name: Collect APK and patch
         run: |
           mkdir -p out
-          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk \;
-          test -s out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
-          git -C upstream diff --binary > out/CloudXtream-V5.0.20-ActivationFixPreview-source.patch
+          find upstream/app/build/outputs/apk/stable/debug -type f -name '*.apk' -exec cp {} out/CloudXtream-preview.apk \;
+          test -s out/CloudXtream-preview.apk
+          git -C upstream diff --binary > out/CloudXtream-preview-source.patch
           cp upstream/LICENSE out/CloudStream-GPL-3.0-LICENSE.txt
-          sha256sum out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk > out/SHA256SUMS.txt
+          sha256sum out/CloudXtream-preview.apk > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
       - name: Capture debug APK signing certificate (not for OTA deployment)
         shell: bash
@@ -158,7 +158,7 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk > out/apk-signing-certificate.txt 2>&1; then
+          if ! "$APKSIGNER" verify --min-sdk-version 23 --print-certs --verbose out/CloudXtream-preview.apk > out/apk-signing-certificate.txt 2>&1; then
             echo 'FAIL: APK signature verification failed; diagnostic output follows'
             cat out/apk-signing-certificate.txt
             exit 1
@@ -171,13 +171,13 @@ jobs:
       - name: Upload Leque debug build
         uses: actions/upload-artifact@v7
         with:
-          name: CloudXtream-by-Leque-v5.0.10-ActivationFixPreview
+          name: CloudXtream-preview
           path: out/
           if-no-files-found: error
           retention-days: 30
       - name: Verify minSdk is Android 8 compatible
         run: |
-          APK=out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
+          APK=out/CloudXtream-preview.apk
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" > out/apk-badging.txt
@@ -208,7 +208,7 @@ jobs:
             set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
-            adb install -r out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
+            adb install -r out/CloudXtream-preview.apk
             test -n "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb install -r "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb shell am instrument -w -e class com.lagradost.cloudstream3.activation.CxKeystoreProofTest,com.lagradost.cloudstream3.CxLayoutTest com.leque.cloudstreamv5.debug.activationfix.test/androidx.test.runner.AndroidJUnitRunner > out/api26-keystore-test.txt
@@ -243,7 +243,7 @@ jobs:
             set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
-            adb install -r out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
+            adb install -r out/CloudXtream-preview.apk
             test -n "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb install -r "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb shell am instrument -w -e class com.lagradost.cloudstream3.activation.CxKeystoreProofTest,com.lagradost.cloudstream3.CxLayoutTest com.leque.cloudstreamv5.debug.activationfix.test/androidx.test.runner.AndroidJUnitRunner > out/api26-keystore-test.txt
@@ -276,7 +276,7 @@ jobs:
             set -eu
             test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "26"
             adb logcat -c || true
-            adb install -r out/CloudXtream-by-Leque-v5.0.10-ActivationFixPreview.apk
+            adb install -r out/CloudXtream-preview.apk
             test -n "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb install -r "$(find upstream/app/build/outputs/apk/androidTest -type f -name '*.apk' -print -quit)"
             adb shell am instrument -w -e class com.lagradost.cloudstream3.activation.CxKeystoreProofTest,com.lagradost.cloudstream3.CxLayoutTest com.leque.cloudstreamv5.debug.activationfix.test/androidx.test.runner.AndroidJUnitRunner > out/api26-keystore-test.txt
@@ -299,7 +299,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: CloudXtream-Leque-v5.0.10-ActivationFixPreview-Android8-Evidence
+          name: CloudXtream-preview-Android8-test-log
           path: |
             out/apk-badging.txt
             out/api26-process.txt
