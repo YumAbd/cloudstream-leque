@@ -307,6 +307,14 @@ class CxLiveFragment : Fragment() {
 
     private fun show(list: List<LiveChannel>, emptyText: String?) {
         channels = list
+        // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
+        if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {
+            val ctx = context
+            if (ctx != null) viewLifecycleOwner.lifecycleScope.launch {
+                withContext(Dispatchers.IO) { runCatching { CxLogos.load(ctx) } }
+                channelList.adapter?.notifyDataSetChanged()
+            }
+        }
         groups = list.groupingBy { it.group }.eachCount().toList()
         groupList.visibility = if (groups.size > 1) View.VISIBLE else View.GONE
         groupList.adapter?.notifyDataSetChanged()
@@ -422,7 +430,8 @@ class CxLiveFragment : Fragment() {
             val initials = h.tile.getChildAt(0) as TextView
             val logo = h.tile.getChildAt(1) as ImageView
             initials.text = initials(c.name)
-            if (c.logo != null) { initials.visibility = View.INVISIBLE; logo.loadImage(c.logo) } else { initials.visibility = View.VISIBLE; logo.setImageDrawable(null) }
+            val logoUrl = c.logo ?: CxLogos.find(c)
+            if (logoUrl != null) { initials.visibility = View.INVISIBLE; logo.loadImage(logoUrl) } else { initials.visibility = View.VISIBLE; logo.setImageDrawable(null) }
             holder.itemView.setOnClickListener { play(holder.bindingAdapterPosition) }
             holder.itemView.setOnLongClickListener { toggleFavourite(c, holder.bindingAdapterPosition); true }
         }

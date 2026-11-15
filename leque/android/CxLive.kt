@@ -17,6 +17,8 @@ data class LiveChannel(
     val group: String,
     val userAgent: String? = null,
     val referer: String? = null,
+    /** tvg-id (e.g. TV1.my), used to find a logo when the playlist has none. */
+    val tvgId: String? = null,
 ) {
     val isYoutube get() = url.startsWith("youtube:")
     val key get() = url
@@ -106,10 +108,11 @@ object CxLive {
 
     // ---------------- favourites and recent ----------------
     private fun channelJson(c: LiveChannel) = JSONObject().put("name", c.name).put("url", c.url).put("logo", c.logo)
-        .put("group", c.group).put("ua", c.userAgent).put("ref", c.referer)
+        .put("group", c.group).put("ua", c.userAgent).put("ref", c.referer).put("tid", c.tvgId)
     private fun channelFrom(o: JSONObject) = LiveChannel(o.optString("name"), o.optString("url"),
         o.optString("logo").takeIf { it.isNotEmpty() && it != "null" }, o.optString("group"),
-        o.optString("ua").takeIf { it.isNotEmpty() && it != "null" }, o.optString("ref").takeIf { it.isNotEmpty() && it != "null" })
+        o.optString("ua").takeIf { it.isNotEmpty() && it != "null" }, o.optString("ref").takeIf { it.isNotEmpty() && it != "null" },
+        o.optString("tid").takeIf { it.isNotEmpty() && it != "null" })
     private fun readList(context: Context, key: String): List<LiveChannel> {
         val a = prefs(context).getString(key, null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
         return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map(::channelFrom)
@@ -228,6 +231,7 @@ object CxLive {
                 url = "$server/live/$user64/$pass64/${s.optString("stream_id")}.$ext",
                 logo = s.optString("stream_icon").takeIf { it.startsWith("http") },
                 group = names[s.optString("category_id")]?.takeIf { it.isNotBlank() } ?: "Lain-lain",
+                tvgId = s.optString("epg_channel_id").takeIf { it.isNotBlank() && it != "null" },
             )
         }.also { if (it.isEmpty()) throw LiveProblem("Akaun Xtream ini tiada saluran live.") }
     }
@@ -257,7 +261,7 @@ object CxLive {
     /** M3U / M3U8 playlist (IPTV format): #EXTINF attributes, #EXTGRP, #EXTVLCOPT and "url|Header=value". */
     fun parseM3u(text: String): List<LiveChannel> {
         val out = ArrayList<LiveChannel>()
-        var name: String? = null; var logo: String? = null; var group: String? = null
+        var name: String? = null; var logo: String? = null; var group: String? = null; var tid: String? = null
         var ua: String? = null; var ref: String? = null; var grp: String? = null
         for (raw in text.lineSequence()) {
             val line = raw.trim()
@@ -271,6 +275,7 @@ object CxLive {
                     name = (if (comma >= 0) line.substring(comma + 1) else "").trim().ifEmpty { attrs["tvg-name"] }
                     logo = attrs["tvg-logo"]?.takeIf { it.startsWith("http") }
                     group = attrs["group-title"]?.takeIf { it.isNotBlank() }
+                    tid = attrs["tvg-id"]?.takeIf { it.isNotBlank() }
                 }
                 line.startsWith("#EXTGRP:", true) -> grp = line.substringAfter(':').trim().takeIf { it.isNotEmpty() }
                 line.startsWith("#EXTVLCOPT:", true) -> {
@@ -293,10 +298,10 @@ object CxLive {
                     }
                     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("youtube:")) {
                         out += LiveChannel(name?.takeIf { it.isNotBlank() } ?: "Saluran ${out.size + 1}", url, logo,
-                            group ?: grp ?: "Lain-lain", ua, ref)
+                            group ?: grp ?: "Lain-lain", ua, ref, tid)
                         if (out.size >= MAX_CHANNELS) break
                     }
-                    name = null; logo = null; group = null; ua = null; ref = null
+                    name = null; logo = null; group = null; ua = null; ref = null; tid = null
                 }
             }
         }
@@ -315,4 +320,50 @@ object CxLive {
     }
 
     fun newId() = "own-" + java.util.UUID.randomUUID().toString()
+}
+
+/**
+ * Logos for channels whose playlist has none: the public iptv-org channel database (downloaded at
+ * most once a week). Matched by tvg-id (e.g. TV1.my) or by the channel name (Malaysian first).
+ */
+object CxLogos {
+    private const val URL = "https://raw.githubusercontent.com/iptv-org/database/master/data/logos.csv"
+    private const val WEEK_MS = 7 * 24 * 3600_000L
+    @Volatile private var map: Map<String, String>? = null
+
+    private val noise = Regex("""\(.*?\)|\[.*?\]|\b(fhd|uhd|hd|sd|4k|hevc|h265|backup|live)\b""")
+    fun key(name: String) = name.lowercase().replace(noise, "").replace(Regex("[^a-z0-9]"), "")
+
+    val loaded get() = map != null
+
+    suspend fun load(context: Context) {
+        if (map != null) return
+        val file = File(File(context.filesDir, "cx_live").apply { mkdirs() }, "logos.csv")
+        if (!file.isFile || System.currentTimeMillis() - file.lastModified() > WEEK_MS) {
+            runCatching { app.get(URL, timeout = 90L).text }.getOrNull()?.takeIf { it.startsWith("channel,") }?.let { file.writeText(it) }
+        }
+        if (!file.isFile) return
+        val out = HashMap<String, String>(80_000)
+        val local = HashSet<String>()
+        file.forEachLine { line ->
+            if (line.startsWith("channel,")) return@forEachLine
+            val id = line.substringBefore(',').trim('"')
+            val rest = line.substringAfter(',')
+            val feed = rest.substringBefore(',').trim('"')
+            val url = line.substringAfterLast(',').trim('"')
+            if (id.isEmpty() || !url.startsWith("https://") || line.contains("vertical")) return@forEachLine
+            val full = id.lowercase()
+            if (feed.isEmpty() || !out.containsKey(full)) out[full] = url
+            val base = "n:" + key(id.substringBefore('.'))
+            val my = full.endsWith(".my")
+            if (!out.containsKey(base) || (my && base !in local)) { out[base] = url; if (my) local += base }
+        }
+        map = out
+    }
+
+    fun find(c: LiveChannel): String? {
+        val m = map ?: return null
+        c.tvgId?.lowercase()?.substringBefore('@')?.let { id -> m[id]?.let { return it } }
+        return m["n:" + key(c.name)]
+    }
 }
