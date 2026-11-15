@@ -367,3 +367,79 @@ object CxLogos {
         return m["n:" + key(c.name)]
     }
 }
+
+/**
+ * Radio player (V5.0.24): plays a station without opening the full-screen player, like a music app,
+ * and keeps playing while the user moves to other menus. One station at a time.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+object CxRadio {
+    enum class State { LOADING, PLAYING, PAUSED, ERROR }
+
+    @Volatile var current: LiveChannel? = null
+        private set
+    @Volatile var state = State.PAUSED
+        private set
+    /** Called on the main thread when the station or state changes (the Radio screen's mini player). */
+    var listener: (() -> Unit)? = null
+
+    private var player: androidx.media3.exoplayer.ExoPlayer? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private fun changed() { main.post { listener?.invoke() } }
+
+    private fun build(context: Context) = androidx.media3.exoplayer.ExoPlayer.Builder(context)
+        .setAudioAttributes(androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
+        .setHandleAudioBecomingNoisy(true)
+        .build().apply {
+            addListener(object : androidx.media3.common.Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (isPlaying) state = State.PLAYING
+                    else if (state == State.PLAYING) state = State.PAUSED
+                    changed()
+                }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == androidx.media3.common.Player.STATE_BUFFERING && playWhenReady) { state = State.LOADING; changed() }
+                }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    state = State.ERROR; changed()
+                }
+            })
+        }
+
+    /** Must be called on the main thread. */
+    fun play(context: Context, c: LiveChannel) {
+        val p = player ?: build(context.applicationContext).also { player = it }
+        current = c; state = State.LOADING
+        val headers = HashMap<String, String>()
+        c.referer?.let { headers["Referer"] = it }
+        val http = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setUserAgent(c.userAgent ?: "CloudXtream/1.0").setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000).setReadTimeoutMs(20_000).setDefaultRequestProperties(headers)
+        val item = androidx.media3.common.MediaItem.Builder().setUri(c.url)
+            .apply { if (c.url.contains(".m3u8")) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8) }.build()
+        p.setMediaSource(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http).createMediaSource(item))
+        p.prepare()
+        p.playWhenReady = true
+        changed()
+    }
+
+    fun toggle() {
+        val p = player ?: return
+        when {
+            state == State.ERROR -> { p.prepare(); p.playWhenReady = true; state = State.LOADING }
+            p.isPlaying || p.playWhenReady -> { p.playWhenReady = false; state = State.PAUSED }
+            else -> { p.playWhenReady = true; state = State.LOADING }
+        }
+        changed()
+    }
+
+    /** Stops and frees the player (also when a TV channel or video starts). */
+    fun stop() {
+        player?.let { it.stop(); it.release() }
+        player = null
+        current = null; state = State.PAUSED
+        changed()
+    }
+}

@@ -109,34 +109,42 @@ class CxLiveFragment : Fragment() {
     private val accent = Color.rgb(0, 204, 239)
     private val fg = Color.rgb(232, 241, 248)
     private val muted = Color.rgb(143, 166, 186)
+    private val onAccent = Color.rgb(4, 20, 30)
 
     private val radio get() = arguments?.getString("mode") == "radio"
     private val scope get() = if (radio) "radio" else ""
     private val tv get() = isLayout(TV)
-    private val wide get() = tv || resources.configuration.screenWidthDp >= 600
 
     private lateinit var title: TextView
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private lateinit var tabs: LinearLayout
     private lateinit var search: EditText
-    private lateinit var groupList: RecyclerView
-    private lateinit var channelList: RecyclerView
+    private lateinit var crumb: TextView
+    private lateinit var grid: RecyclerView
+    private lateinit var gridLayout: GridLayoutManager
     private lateinit var empty: TextView
     private lateinit var addButton: View
     private lateinit var phoneButton: View
+    private var miniBar: LinearLayout? = null
 
     private var sources: List<LiveSource> = emptyList()
     private var allowOwn = false
     private var current = ""
     private var channels: List<LiveChannel> = emptyList()
     private var groups: List<Pair<String, Int>> = emptyList()
+    /** Live TV shows categories first (OTT Navigator style); null = the category list. */
     private var group: String? = null
+    private var showingCategories = false
     private var shown: List<LiveChannel> = emptyList()
     private var favourites: Set<String> = emptySet()
     private var loadJob: Job? = null
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { importFile(it) } }
+
+    private val back = object : androidx.activity.OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { openCategories() }
+    }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
 
@@ -163,7 +171,7 @@ class CxLiveFragment : Fragment() {
 
     private fun chip(label: String, selected: Boolean, onClick: () -> Unit) = TextView(requireContext()).apply {
         text = label; textSize = 14f; setSingleLine(true)
-        setTextColor(if (selected) Color.rgb(4, 20, 30) else fg)
+        setTextColor(if (selected) onAccent else fg)
         setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
         background = states(20); isSelected = selected
         setPadding(dp(16), dp(9), dp(16), dp(9)); isFocusable = true; isClickable = true
@@ -192,16 +200,15 @@ class CxLiveFragment : Fragment() {
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         progress = ProgressBar(ctx).apply { isIndeterminate = true; indeterminateTintList = ColorStateList.valueOf(accent); visibility = View.GONE }
         header.addView(progress, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(8) })
-        val iconSize = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(2) }
         addButton = iconButton(R.drawable.cx_ic_add, "Tambah playlist") { addPlaylistDialog() }
         phoneButton = iconButton(R.drawable.cx_ic_phone, "Hantar dari telefon") { phoneDialog() }
-        header.addView(iconButton(R.drawable.cx_ic_refresh, "Muat semula") { reload(fresh = true) }, iconSize)
+        header.addView(iconButton(R.drawable.cx_ic_refresh, "Muat semula") { reload(fresh = true) }, LinearLayout.LayoutParams(dp(44), dp(44)))
         header.addView(addButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(2) })
         header.addView(phoneButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(2) })
         root.addView(header)
 
         tabs = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(12), 0, dp(10)) }
-        root.addView(HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; addView(tabs) })
+        root.addView(HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false; addView(tabs) })
 
         search = EditText(ctx).apply {
             hint = if (radio) "Cari stesen" else "Cari saluran"; setSingleLine(true); textSize = 15f
@@ -212,42 +219,60 @@ class CxLiveFragment : Fragment() {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun afterTextChanged(s: Editable?) { applyFilter() }
+                override fun afterTextChanged(s: Editable?) { render() }
             })
         }
-        root.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(10) })
+        root.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(8) })
 
-        groupList = RecyclerView(ctx).apply {
-            adapter = GroupAdapter(); clipToPadding = false
-            layoutManager = LinearLayoutManager(ctx, if (wide) RecyclerView.VERTICAL else RecyclerView.HORIZONTAL, false)
+        // "‹ Kategori · Sukan": back to the categories (also the Back key).
+        crumb = TextView(ctx).apply {
+            textSize = 15f; setTextColor(accent); setTypeface(typeface, Typeface.BOLD); background = states(16, Color.TRANSPARENT)
+            setPadding(dp(10), dp(8), dp(12), dp(8)); isFocusable = true; isClickable = true; visibility = View.GONE
+            setOnClickListener { openCategories() }
         }
-        channelList = RecyclerView(ctx).apply {
-            adapter = ChannelAdapter(); clipToPadding = false; setPadding(0, 0, 0, dp(96))
-            val span = if (wide) maxOf(2, (resources.configuration.screenWidthDp - (if (tv) 330 else 280)) / 180) else 1
-            layoutManager = GridLayoutManager(ctx, span)
+        root.addView(crumb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(4) })
+
+        gridLayout = GridLayoutManager(ctx, 3)
+        grid = RecyclerView(ctx).apply {
+            layoutManager = gridLayout; adapter = GridAdapter(); clipToPadding = false; setPadding(0, 0, 0, dp(24))
+            // Columns follow the real width: correct after rotating, after the player and on TV.
+            addOnLayoutChangeListener { v, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) updateSpan(r - l) }
         }
         empty = TextView(ctx).apply { setTextColor(muted); textSize = 15f; gravity = Gravity.CENTER; setPadding(dp(24), dp(48), dp(24), dp(24)); visibility = View.GONE }
-        val channelsBox = FrameLayout(ctx).apply {
-            addView(channelList, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(FrameLayout(ctx).apply {
+            addView(grid, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(empty, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
-        if (wide) {
-            val body = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-            body.addView(groupList, LinearLayout.LayoutParams(dp(if (tv) 230 else 200), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(12) })
-            body.addView(channelsBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-            root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        } else {
-            root.addView(groupList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
-            root.addView(channelsBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        if (radio) root.addView(buildMiniBar(ctx), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, dp(6), 0, dp(8)) })
         title.text = if (radio) "Radio" else "Live TV"
         return root
+    }
+
+    private fun updateSpan(widthPx: Int) {
+        if (widthPx <= 0) return
+        val cell = dp(if (showingCategories) 170 else if (tv) 150 else 112)
+        val span = maxOf(if (showingCategories) 2 else 3, widthPx / cell)
+        if (gridLayout.spanCount != span) { gridLayout.spanCount = span; grid.adapter?.notifyDataSetChanged() }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        grid.post { updateSpan(grid.width) }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         ViewCompat.requestApplyInsets(view)
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, back)
+        if (radio) CxRadio.listener = { updateMiniBar() }
+        updateMiniBar()
         reload(fresh = true)
+    }
+
+    override fun onDestroyView() {
+        if (radio) CxRadio.listener = null
+        miniBar = null
+        super.onDestroyView()
     }
 
     private fun loading(on: Boolean) { progress.visibility = if (on) View.VISIBLE else View.GONE }
@@ -264,7 +289,7 @@ class CxLiveFragment : Fragment() {
             addButton.visibility = if (allowOwn) View.VISIBLE else View.GONE
             phoneButton.visibility = if (allowOwn) View.VISIBLE else View.GONE
             val keep = current.takeIf { c -> c == FAV || c == RECENT || sources.any { it.id == c } }
-            select(keep ?: sources.firstOrNull()?.id ?: FAV, fresh)
+            select(keep ?: sources.firstOrNull()?.id ?: FAV, fresh, keepGroup = keep != null)
         }
     }
 
@@ -278,9 +303,11 @@ class CxLiveFragment : Fragment() {
         }
     }
 
-    private fun select(id: String, fresh: Boolean) {
+    private fun select(id: String, fresh: Boolean, keepGroup: Boolean = false) {
         val ctx = context ?: return
-        current = id; group = null
+        val sameSource = id == current
+        current = id
+        if (!(keepGroup && sameSource)) group = null
         renderTabs()
         loadJob?.cancel()
         favourites = CxLive.favouriteKeys(ctx, scope)
@@ -307,37 +334,60 @@ class CxLiveFragment : Fragment() {
 
     private fun show(list: List<LiveChannel>, emptyText: String?) {
         channels = list
+        groups = list.groupingBy { it.group }.eachCount().toList()
+        if (group != null && groups.none { it.first == group }) group = null
         // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
         if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {
             val ctx = context
             if (ctx != null) viewLifecycleOwner.lifecycleScope.launch {
                 withContext(Dispatchers.IO) { runCatching { CxLogos.load(ctx) } }
-                channelList.adapter?.notifyDataSetChanged()
+                grid.adapter?.notifyDataSetChanged()
             }
         }
-        groups = list.groupingBy { it.group }.eachCount().toList()
-        groupList.visibility = if (groups.size > 1) View.VISIBLE else View.GONE
-        groupList.adapter?.notifyDataSetChanged()
-        applyFilter()
-        empty.text = emptyText.orEmpty()
-        empty.visibility = if (list.isEmpty() && emptyText != null) View.VISIBLE else View.GONE
+        render(emptyText)
     }
 
-    private fun applyFilter() {
+    /**
+     * Live TV (with more than one category, outside Favourites/Recent and without a search):
+     * the categories first, then the channels of the chosen one. Radio: the stations directly.
+     */
+    private fun render(emptyText: String? = null) {
         val q = search.text?.toString()?.trim()?.lowercase().orEmpty()
-        shown = channels.filter { (group == null || it.group == group) && (q.isEmpty() || it.name.lowercase().contains(q)) }
-        channelList.adapter?.notifyDataSetChanged()
+        val byCategory = !radio && current != FAV && current != RECENT && groups.size > 1
+        showingCategories = byCategory && group == null && q.isEmpty()
+        shown = if (showingCategories) emptyList() else channels.filter {
+            (group == null || group == ALL || q.isNotEmpty() || it.group == group) && (q.isEmpty() || it.name.lowercase().contains(q))
+        }
+        back.isEnabled = byCategory && group != null
+        crumb.visibility = if (byCategory && group != null && q.isEmpty()) View.VISIBLE else View.GONE
+        crumb.text = "‹  Kategori  ·  " + (if (group == ALL) "Semua" else group ?: "")
+        updateSpan(grid.width)
+        grid.adapter?.notifyDataSetChanged()
+        grid.scrollToPosition(0)
         val noun = if (radio) "stesen" else "saluran"
-        if (channels.isNotEmpty()) status.text = shown.size.toString() + " " + noun + (group?.let { " · $it" } ?: "")
-        else if (empty.visibility != View.VISIBLE) status.text = ""
-        if (channels.isNotEmpty()) empty.visibility = if (shown.isEmpty()) View.VISIBLE.also { empty.text = "Tiada padanan." } else View.GONE
+        status.text = when {
+            channels.isEmpty() -> ""
+            showingCategories -> groups.size.toString() + " kategori · " + channels.size + " " + noun
+            else -> shown.size.toString() + " " + noun + (group?.takeIf { q.isEmpty() && it != ALL }?.let { " · $it" } ?: "")
+        }
+        val nothing = if (showingCategories) groups.isEmpty() else shown.isEmpty()
+        when {
+            channels.isEmpty() && emptyText != null -> { empty.text = emptyText; empty.visibility = View.VISIBLE }
+            channels.isNotEmpty() && nothing -> { empty.text = "Tiada padanan."; empty.visibility = View.VISIBLE }
+            channels.isNotEmpty() -> empty.visibility = View.GONE
+        }
     }
+
+    private fun openCategory(name: String?) { group = name ?: ALL; render(); grid.requestFocus() }
+    private fun openCategories() { group = null; render() }
 
     // ---------------- play ----------------
     private fun play(index: Int) {
         val c = shown.getOrNull(index) ?: return
         val ctx = context ?: return
         CxLive.addRecent(ctx, c, scope)
+        if (radio) { CxRadio.play(ctx, c); return }
+        CxRadio.stop()
         if (c.isYoutube) {
             startActivity(Intent(ctx, CxYoutubeActivity::class.java).putExtra("channel", c.url.removePrefix("youtube:")).putExtra("title", c.name))
             return
@@ -345,7 +395,7 @@ class CxLiveFragment : Fragment() {
         // The player moves through the channels of this list (CH+/CH-).
         val playable = shown.filter { !it.isYoutube }
         val at = playable.indexOf(c).coerceAtLeast(0)
-        val listName = sources.firstOrNull { it.id == current }?.name ?: title.text.toString()
+        val listName = group?.takeIf { it != ALL } ?: sources.firstOrNull { it.id == current }?.name ?: title.text.toString()
         activity.navigate(R.id.global_to_navigation_player, GeneratorPlayer.newInstance(CxLiveGenerator(playable, listName), at))
     }
 
@@ -354,89 +404,113 @@ class CxLiveFragment : Fragment() {
         val now = CxLive.toggleFavourite(ctx, c, scope)
         favourites = CxLive.favouriteKeys(ctx, scope)
         Toast.makeText(ctx, if (now) "Ditambah ke Kegemaran" else "Dibuang daripada Kegemaran", Toast.LENGTH_SHORT).show()
-        if (current == FAV) select(FAV, false) else channelList.adapter?.notifyItemChanged(position)
+        if (current == FAV) select(FAV, false) else grid.adapter?.notifyItemChanged(position)
     }
 
-    // ---------------- adapters ----------------
-    private inner class GroupAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-        override fun getItemCount() = if (groups.size > 1) groups.size + 1 else 0
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-            val v = TextView(parent.context).apply {
-                textSize = 14f; isFocusable = true; isClickable = true; background = states(if (wide) 12 else 20)
-                setPadding(dp(14), dp(if (wide) 12 else 8), dp(14), dp(if (wide) 12 else 8))
-                if (wide) maxLines = 2 else setSingleLine(true)
-                layoutParams = if (wide) RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) }
-                else RecyclerView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) }
-            }
-            return object : RecyclerView.ViewHolder(v) {}
-        }
-        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            val v = holder.itemView as TextView
-            val (name, count) = if (position == 0) "Semua" to channels.size else groups[position - 1]
-            val value = if (position == 0) null else name
-            val selected = group == value
-            v.text = "$name  $count"
-            v.isSelected = selected
-            v.setTextColor(if (selected) Color.rgb(4, 20, 30) else fg)
-            v.setOnClickListener { group = value; notifyDataSetChanged(); applyFilter() }
-        }
-    }
+    // ---------------- grid ----------------
+    private class Holder(val tile: FrameLayout, val initials: TextView, val logo: ImageView, val name: TextView, val sub: TextView, val star: ImageView)
 
-    private inner class ChannelAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-        override fun getItemCount() = shown.size
+    private inner class GridAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount() = if (showingCategories) groups.size + 1 else shown.size
+        override fun getItemViewType(position: Int) = if (showingCategories) 1 else 0
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val ctx = parent.context
-            val tile = FrameLayout(ctx).apply { background = shape(surfaceHigh, 10) }
-            tile.addView(TextView(ctx).apply { textSize = 18f; setTypeface(typeface, Typeface.BOLD); setTextColor(muted); gravity = Gravity.CENTER },
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            tile.addView(ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(dp(6), dp(6), dp(6), dp(6)) },
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            val name = TextView(ctx).apply { setTextColor(fg); textSize = 14.5f; setTypeface(typeface, Typeface.BOLD); maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
-            val sub = TextView(ctx).apply { setTextColor(muted); textSize = 12f; setSingleLine(true); ellipsize = TextUtils.TruncateAt.END }
+            val tile = FrameLayout(ctx).apply { background = shape(surfaceHigh, 12) }
+            val initials = TextView(ctx).apply { textSize = if (viewType == 1) 26f else 20f; setTypeface(typeface, Typeface.BOLD); setTextColor(muted); gravity = Gravity.CENTER }
+            val logo = ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(dp(10), dp(10), dp(10), dp(10)) }
+            tile.addView(initials, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            tile.addView(logo, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             val star = ImageView(ctx).apply { setImageResource(R.drawable.cx_ic_star); imageTintList = ColorStateList.valueOf(Color.rgb(255, 196, 0)) }
-            val card = if (wide) {
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) }
-                    setPadding(dp(8), dp(8), dp(8), dp(10))
-                    addView(FrameLayout(ctx).apply {
-                        addView(tile, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (tv) 96 else 84)))
-                        addView(star, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.TOP or Gravity.END).apply { setMargins(0, dp(6), dp(6), 0) })
-                    })
-                    addView(name.apply { gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, dp(8), 0, 0) })
-                    addView(sub.apply { gravity = Gravity.CENTER_HORIZONTAL })
-                }
-            } else {
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                    layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, dp(4), 0, dp(4)) }
-                    setPadding(dp(10), dp(10), dp(12), dp(10))
-                    addView(tile, LinearLayout.LayoutParams(dp(72), dp(52)).apply { marginEnd = dp(14) })
-                    addView(LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; addView(name); addView(sub) },
-                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(star, LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginStart = dp(8) })
-                }
+            tile.addView(star, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.TOP or Gravity.END).apply { setMargins(0, dp(6), dp(6), 0) })
+            val name = TextView(ctx).apply { setTextColor(fg); textSize = 13.5f; setTypeface(typeface, Typeface.BOLD); maxLines = 2; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, dp(8), 0, 0) }
+            val sub = TextView(ctx).apply { setTextColor(muted); textSize = 12f; setSingleLine(true); ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER_HORIZONTAL }
+            val card = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) }
+                setPadding(dp(8), dp(8), dp(8), dp(10))
+                addView(tile, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (viewType == 1) 92 else if (tv) 88 else 76)))
+                addView(name); addView(sub)
+                background = states(16); isFocusable = true; isClickable = true; isLongClickable = true
             }
-            card.background = states(14); card.isFocusable = true; card.isClickable = true; card.isLongClickable = true
-            card.tag = Holder(tile, name, sub, star)
+            card.tag = Holder(tile, initials, logo, name, sub, star)
             return object : RecyclerView.ViewHolder(card) {}
         }
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            val c = shown[position]
             val h = holder.itemView.tag as Holder
+            if (showingCategories) {
+                val (name, count) = if (position == 0) "Semua" to channels.size else groups[position - 1]
+                h.name.text = name
+                h.sub.text = count.toString() + if (radio) " stesen" else " saluran"
+                h.star.visibility = View.GONE
+                // The category shows the logo of its first channel that has one.
+                val sample = channels.firstOrNull { (position == 0 || it.group == name) && (it.logo != null || CxLogos.find(it) != null) }
+                val url = sample?.let { it.logo ?: CxLogos.find(it) }
+                h.initials.text = initials(name)
+                if (url != null) { h.initials.visibility = View.INVISIBLE; h.logo.alpha = 0.9f; h.logo.loadImage(url) } else { h.initials.visibility = View.VISIBLE; h.logo.setImageDrawable(null) }
+                holder.itemView.setOnClickListener { openCategory(if (position == 0) null else name) }
+                holder.itemView.setOnLongClickListener(null)
+                return
+            }
+            val c = shown[position]
             h.name.text = c.name
-            h.sub.text = if (c.isYoutube) "YouTube · " + c.group else c.group
+            h.sub.text = if (c.isYoutube) "YouTube" else c.group
             h.star.visibility = if (c.key in favourites) View.VISIBLE else View.GONE
-            val initials = h.tile.getChildAt(0) as TextView
-            val logo = h.tile.getChildAt(1) as ImageView
-            initials.text = initials(c.name)
+            h.initials.text = initials(c.name)
+            h.logo.alpha = 1f
             val logoUrl = c.logo ?: CxLogos.find(c)
-            if (logoUrl != null) { initials.visibility = View.INVISIBLE; logo.loadImage(logoUrl) } else { initials.visibility = View.VISIBLE; logo.setImageDrawable(null) }
+            if (logoUrl != null) { h.initials.visibility = View.INVISIBLE; h.logo.loadImage(logoUrl) } else { h.initials.visibility = View.VISIBLE; h.logo.setImageDrawable(null) }
             holder.itemView.setOnClickListener { play(holder.bindingAdapterPosition) }
             holder.itemView.setOnLongClickListener { toggleFavourite(c, holder.bindingAdapterPosition); true }
         }
     }
-    private class Holder(val tile: FrameLayout, val name: TextView, val sub: TextView, val star: ImageView)
+
+    // ---------------- radio mini player ----------------
+    private fun buildMiniBar(ctx: android.content.Context): View {
+        val bar = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            background = shape(surfaceHigh, 16); setPadding(dp(10), dp(8), dp(8), dp(8)); visibility = View.GONE
+        }
+        val art = ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER; background = shape(surface, 10); setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(8), 0) }
+        val name = TextView(ctx).apply { setTextColor(fg); textSize = 15f; setTypeface(typeface, Typeface.BOLD); setSingleLine(true); ellipsize = TextUtils.TruncateAt.END }
+        val state = TextView(ctx).apply { setTextColor(muted); textSize = 12f; setSingleLine(true) }
+        texts.addView(name); texts.addView(state)
+        val toggle = ImageButton(ctx).apply {
+            imageTintList = ColorStateList.valueOf(onAccent); background = states(24, accent, accent); isFocusable = true
+            setPadding(dp(10), dp(10), dp(10), dp(10)); scaleType = ImageView.ScaleType.FIT_CENTER; contentDescription = "Main / jeda"
+            setOnClickListener { CxRadio.toggle() }
+        }
+        val stop = ImageButton(ctx).apply {
+            setImageResource(R.drawable.cx_ic_close); imageTintList = ColorStateList.valueOf(fg); background = states(22, Color.TRANSPARENT)
+            setPadding(dp(10), dp(10), dp(10), dp(10)); scaleType = ImageView.ScaleType.FIT_CENTER; isFocusable = true; contentDescription = "Henti"
+            setOnClickListener { CxRadio.stop() }
+        }
+        bar.addView(art, LinearLayout.LayoutParams(dp(48), dp(48)))
+        bar.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        bar.addView(toggle, LinearLayout.LayoutParams(dp(48), dp(48)))
+        bar.addView(stop, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(4) })
+        bar.tag = listOf(art, name, state, toggle)
+        miniBar = bar
+        return bar
+    }
+
+    private fun updateMiniBar() {
+        val bar = miniBar ?: return
+        val c = CxRadio.current
+        if (c == null) { bar.visibility = View.GONE; return }
+        @Suppress("UNCHECKED_CAST") val parts = bar.tag as List<View>
+        val art = parts[0] as ImageView; val name = parts[1] as TextView; val state = parts[2] as TextView; val toggle = parts[3] as ImageButton
+        bar.visibility = View.VISIBLE
+        name.text = c.name
+        state.text = when (CxRadio.state) {
+            CxRadio.State.LOADING -> "Menyambung…"
+            CxRadio.State.PLAYING -> "Sedang dimainkan"
+            CxRadio.State.PAUSED -> "Dijeda"
+            CxRadio.State.ERROR -> "Stesen tidak dapat dimainkan"
+        }
+        toggle.setImageResource(if (CxRadio.state == CxRadio.State.PLAYING || CxRadio.state == CxRadio.State.LOADING) R.drawable.cx_ic_pause else R.drawable.cx_ic_play)
+        if (c.logo != null) art.loadImage(c.logo) else art.setImageResource(R.drawable.cx_radio)
+    }
 
     // ---------------- own playlists ----------------
     private fun field(hint: String, password: Boolean = false) = EditText(requireContext()).apply {
@@ -571,6 +645,8 @@ class CxLiveFragment : Fragment() {
     companion object {
         private const val FAV = "@fav"
         private const val RECENT = "@recent"
+        /** The "Semua" category (all channels of the list). */
+        private const val ALL = "\u0000all"
     }
 }
 

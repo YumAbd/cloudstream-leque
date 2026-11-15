@@ -39,7 +39,7 @@ files[res+"drawable/cx_live_tv.xml"]='''<vector xmlns:android="http://schemas.an
 </vector>
 '''
 # Icons (Material Design paths).
-CX_ICONS={'cx_movie': 'M18,4l2,4h-3l-2,-4h-2l2,4h-3l-2,-4H8l2,4H7L5,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V4h-4z', 'cx_radio': 'M3.24,6.15C2.51,6.43 2,7.17 2,8v12c0,1.1 0.89,2 2,2h16c1.11,0 2,-0.9 2,-2L22,8c0,-1.11 -0.89,-2 -2,-2L8.3,6l8.26,-3.34L15.88,1 3.24,6.15zM7,20c-1.66,0 -3,-1.34 -3,-3s1.34,-3 3,-3 3,1.34 3,3 -1.34,3 -3,3zM20,12h-2v-2h-2v2L4,12L4,8h16v4z', 'cx_more': 'M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z', 'cx_ic_refresh': 'M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z', 'cx_ic_add': 'M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z', 'cx_ic_phone': 'M15.5,1h-8C6.12,1 5,2.12 5,3.5v17C5,21.88 6.12,23 7.5,23h8c1.38,0 2.5,-1.12 2.5,-2.5v-17C18,2.12 16.88,1 15.5,1zM11.5,22c-0.83,0 -1.5,-0.67 -1.5,-1.5s0.67,-1.5 1.5,-1.5 1.5,0.67 1.5,1.5 -0.67,1.5 -1.5,1.5zM16,18H7V4h9v14z', 'cx_ic_search': 'M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5zM9.5,14C7.01,14 5,11.99 5,9.5S7.01,5 9.5,5 14,7.01 14,9.5 11.99,14 9.5,14z', 'cx_ic_star': 'M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z'}
+CX_ICONS={'cx_movie': 'M18,4l2,4h-3l-2,-4h-2l2,4h-3l-2,-4H8l2,4H7L5,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V4h-4z', 'cx_radio': 'M3.24,6.15C2.51,6.43 2,7.17 2,8v12c0,1.1 0.89,2 2,2h16c1.11,0 2,-0.9 2,-2L22,8c0,-1.11 -0.89,-2 -2,-2L8.3,6l8.26,-3.34L15.88,1 3.24,6.15zM7,20c-1.66,0 -3,-1.34 -3,-3s1.34,-3 3,-3 3,1.34 3,3 -1.34,3 -3,3zM20,12h-2v-2h-2v2L4,12L4,8h16v4z', 'cx_more': 'M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z', 'cx_ic_refresh': 'M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z', 'cx_ic_add': 'M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z', 'cx_ic_phone': 'M15.5,1h-8C6.12,1 5,2.12 5,3.5v17C5,21.88 6.12,23 7.5,23h8c1.38,0 2.5,-1.12 2.5,-2.5v-17C18,2.12 16.88,1 15.5,1zM11.5,22c-0.83,0 -1.5,-0.67 -1.5,-1.5s0.67,-1.5 1.5,-1.5 1.5,0.67 1.5,1.5 -0.67,1.5 -1.5,1.5zM16,18H7V4h9v14z', 'cx_ic_search': 'M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5zM9.5,14C7.01,14 5,11.99 5,9.5S7.01,5 9.5,5 14,7.01 14,9.5 11.99,14 9.5,14z', 'cx_ic_close':'M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z', 'cx_ic_pause':'M6,19h4L10,5L6,5v14zM14,5v14h4L18,5h-4z', 'cx_ic_play':'M8,5v14l11,-7z', 'cx_ic_star': 'M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z'}
 for name,path in CX_ICONS.items():
     files[res+"drawable/"+name+".xml"]=('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
@@ -164,6 +164,52 @@ patch(p,"""    private fun onNavDestinationSelected(item: MenuItem, navControlle
             return false
         }
 """)
+
+# Profiles (Netflix style): the start-up profile picker has no "+" and no edit button, so profiles
+# are added or locked from inside the app (profile icon, or Settings -> Profil & kunci). A profile,
+# also the only one, can be locked with a PIN; a locked profile always asks for it at start-up.
+p=src+"ui/account/AccountSelectActivity2.kt"
+patch(p,'        const val IS_EDITING_FROM_MAIN_ACTIVITY = "isEditingFromMainActivity"\n',
+        '        const val IS_EDITING_FROM_MAIN_ACTIVITY = "isEditingFromMainActivity"\n'
+        '        /** True on the start-up profile picker (not opened from inside the app). */\n'
+        '        @JvmStatic var cxStartup = false\n')
+patch(p,"        val isFromMainActivity = intent.getBooleanExtra(IS_FROM_MAIN_ACTIVITY, false)\n",
+        "        val isFromMainActivity = intent.getBooleanExtra(IS_FROM_MAIN_ACTIVITY, false)\n"
+        "        cxStartup = !isFromMainActivity && !isEditingFromMainActivity\n")
+p=src+"ui/account/AccountScreen.kt"
+patch(p,"                IconButton(\n                    onClick = {\n                        onAction(AccountAction.SetEditMode(!state.canEditAccount))",
+        "                if (!AccountSelectActivity2.cxStartup) IconButton(\n                    onClick = {\n                        onAction(AccountAction.SetEditMode(!state.canEditAccount))")
+patch(p,"                                up = edit","                                if (!AccountSelectActivity2.cxStartup) up = edit")
+patch(p,"            var hasFocus by remember { mutableStateOf(false) }\n            val size = 100.dp",
+        "            // \"+\" only while managing profiles inside the app.\n            if (state.canEditAccount) {\n"
+        "            var hasFocus by remember { mutableStateOf(false) }\n            val size = 100.dp")
+patch(p,"""                Text(
+                    text = stringResource(R.string.add_account),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+            }""","""                Text(
+                    text = stringResource(R.string.add_account),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            }""")
+patch(res+"layout/main_settings.xml",'            <TextView\n                android:id="@+id/settings_credits"',
+      '            <TextView\n                android:id="@+id/settings_cx_profiles"\n                style="@style/SettingsItem"\n'
+      '                android:text="Profil &amp; kunci profil" />\n\n            <TextView\n                android:id="@+id/settings_credits"')
+patch(src+"ui/settings/SettingsFragment.kt","""            // Default focus on TV
+            if (isLayout(TV)) {
+                settingsGeneral.requestFocus()
+            }""","""            // Default focus on TV
+            if (isLayout(TV)) {
+                settingsGeneral.requestFocus()
+            }
+            // Profiles: add, edit and lock them with a PIN (V5.0.24).
+            root.findViewById<View>(R.id.settings_cx_profiles)?.apply {
+                if (isLayout(TV)) { isFocusable = true; isFocusableInTouchMode = true }
+                setOnClickListener { with(com.lagradost.cloudstream3.ui.account.AccountHelper) { activity.showAccountSelectLinear() } }
+            }""")
 
 for path,source in files.items():
     target=ROOT/path
