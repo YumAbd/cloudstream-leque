@@ -92,6 +92,31 @@ object CxLive {
             (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { LiveSource.fromJson(it, false) })
     }
 
+    // ---------------- first screen ----------------
+    val START_SCREENS = listOf("movie", "live", "radio")
+
+    /** The menu the app opens on: the user's choice, else the admin's for the license ("movie" or "live"). */
+    fun startScreen(context: Context): String {
+        val p = prefs(context)
+        p.getString("start_screen", null)?.let { if (it in START_SCREENS) return it }
+        val admin = p.getString("config", null)?.let { runCatching { JSONObject(it).optString("start_screen") }.getOrNull() }
+        return if (admin == "live") "live" else "movie"
+    }
+
+    fun setStartScreen(context: Context, screen: String) {
+        if (screen in START_SCREENS) prefs(context).edit().putString("start_screen", screen).apply()
+    }
+
+    /** Refreshes the server's answer (sources, first screen) in the background, at most every 6 hours. */
+    fun refreshConfigIfOld(context: Context) {
+        val app = context.applicationContext
+        val p = prefs(app)
+        val now = System.currentTimeMillis()
+        if (now - p.getLong("config_ms", 0L) < 6 * 3600_000L) return
+        p.edit().putLong("config_ms", now).apply()
+        Thread { try { config(app, true) } catch (_: Exception) {} }.start()
+    }
+
     fun ownSources(context: Context): List<LiveSource> {
         val a = prefs(context).getString("own", null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
         return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { LiveSource.fromJson(it, true) }

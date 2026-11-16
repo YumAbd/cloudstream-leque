@@ -49,15 +49,15 @@ for name,path in CX_ICONS.items():
 ''')
 def item(i,icon,title): return '        <item android:id="@+id/'+i+'" android:icon="@drawable/'+icon+'" android:title="'+title+'" />\n'
 HEAD='<?xml version="1.0" encoding="utf-8"?>\n<menu xmlns:android="http://schemas.android.com/apk/res/android">\n'
-# Landscape / TV rail: seven items.
-files[res+"menu/cx_rail_menu.xml"]=HEAD+item("navigation_home","cx_movie","Filem")+item("navigation_search","search_icon","@string/title_search")+\
-    item("navigation_live","cx_live_tv","Live TV")+item("navigation_radio","cx_radio","Radio")+item("navigation_library","library_icon_selector","@string/library")+\
+# Landscape / TV rail: seven items, Live TV first.
+files[res+"menu/cx_rail_menu.xml"]=HEAD+item("navigation_live","cx_live_tv","Live TV")+item("navigation_home","cx_movie","Filem")+\
+    item("navigation_search","search_icon","@string/title_search")+item("navigation_radio","cx_radio","Radio")+item("navigation_library","library_icon_selector","@string/library")+\
     item("navigation_downloads","netflix_download","@string/title_downloads")+item("navigation_settings","settings_icon_selector","@string/title_settings")+"</menu>\n"
 # Phone (portrait) bar, five items at most: More opens Library, Downloads and Settings.
 old=read(res+"menu/bottom_nav_menu.xml")
 if 'navigation_downloads' not in old or 'navigation_settings' not in old: sys.exit("FAIL: V5.0.24 unexpected bottom_nav_menu.xml")
-files[res+"menu/bottom_nav_menu.xml"]=HEAD+item("navigation_home","cx_movie","Filem")+item("navigation_search","search_icon","@string/title_search")+\
-    item("navigation_live","cx_live_tv","Live TV")+item("navigation_radio","cx_radio","Radio")+item("navigation_cx_more","cx_more","Lagi")+"</menu>\n"
+files[res+"menu/bottom_nav_menu.xml"]=HEAD+item("navigation_live","cx_live_tv","Live TV")+item("navigation_home","cx_movie","Filem")+\
+    item("navigation_search","search_icon","@string/title_search")+item("navigation_radio","cx_radio","Radio")+item("navigation_cx_more","cx_more","Lagi")+"</menu>\n"
 for layout in ("layout/activity_main.xml","layout/activity_main_tv.xml"):
     current=read(res+layout)
     new,n=re.subn(r'app:menu="@menu/bottom_nav_menu"(\s*\n\s*app:menuGravity)',r'app:menu="@menu/cx_rail_menu"\1',current)
@@ -112,11 +112,42 @@ patch(p,'''            for (id in arrayOf(
                 R.id.navigation_home,
                 R.id.navigation_search,
                 R.id.navigation_library,''','''            for (id in arrayOf(
+                R.id.navigation_live,
                 R.id.navigation_home,
                 R.id.navigation_search,
-                R.id.navigation_live,
                 R.id.navigation_radio,
                 R.id.navigation_library,''')
+
+# First screen: films unless the admin set Live TV for the license; the user can choose Films,
+# Live TV or Radio in Settings. Only on a normal start (not a link, not after a rotation).
+patch(p,'''        val rail = binding?.navRailView
+        if (rail != null) {''','''        com.lagradost.cloudstream3.ui.live.CxLive.refreshConfigIfOld(this)
+        if (savedInstanceState == null && intent?.data == null && (intent?.action == null || intent?.action == Intent.ACTION_MAIN)) {
+            val cxFirst = when (com.lagradost.cloudstream3.ui.live.CxLive.startScreen(this)) {
+                "live" -> R.id.navigation_live
+                "radio" -> R.id.navigation_radio
+                else -> 0
+            }
+            if (cxFirst != 0) binding?.navHostFragment?.post {
+                try {
+                    navController.navigate(cxFirst, null, NavOptions.Builder().setLaunchSingleTop(true)
+                        .setPopUpTo(navController.graph.startDestinationId, false).build())
+                } catch (e: Exception) {
+                    android.util.Log.w("CxLive", "First screen not opened (" + e.javaClass.simpleName + ")")
+                }
+            }
+        }
+
+        val rail = binding?.navRailView
+        if (rail != null) {''')
+
+# Films: the extension picker shows every category except Live, Others and NSFW by default
+# (new key, so the old default of Movies + Series is replaced once).
+patch(src+"utils/DataStoreHelper.kt",'''    private var homePreferenceStrings: List<String> by UserPreferenceDelegate(
+        "home_pref_homepage",
+        listOf(TvType.Movie, TvType.TvSeries).map { it.name })''','''    private var homePreferenceStrings: List<String> by UserPreferenceDelegate(
+        "home_pref_homepage_cx2",
+        TvType.values().filter { it != TvType.Live && it != TvType.Others && it != TvType.NSFW }.map { it.name })''')
 
 patch("app/src/main/AndroidManifest.xml",'''        <activity android:name=".activation.CxActivationActivity"
             android:exported="false" />''','''        <activity android:name=".activation.CxActivationActivity"
@@ -197,7 +228,8 @@ patch(p,"""                Text(
             }""")
 patch(res+"layout/main_settings.xml",'            <TextView\n                android:id="@+id/settings_credits"',
       '            <TextView\n                android:id="@+id/settings_cx_profiles"\n                style="@style/SettingsItem"\n'
-      '                android:text="Profil &amp; kunci profil" />\n\n            <TextView\n                android:id="@+id/settings_credits"')
+      '                android:text="Profil &amp; kunci profil" />\n\n            <TextView\n                android:id="@+id/settings_cx_start"\n                style="@style/SettingsItem"\n'
+      '                android:text="Menu utama semasa buka app" />\n\n            <TextView\n                android:id="@+id/settings_credits"')
 patch(src+"ui/settings/SettingsFragment.kt","""            // Default focus on TV
             if (isLayout(TV)) {
                 settingsGeneral.requestFocus()
@@ -209,6 +241,25 @@ patch(src+"ui/settings/SettingsFragment.kt","""            // Default focus on T
             root.findViewById<View>(R.id.settings_cx_profiles)?.apply {
                 if (isLayout(TV)) { isFocusable = true; isFocusableInTouchMode = true }
                 setOnClickListener { with(com.lagradost.cloudstream3.ui.account.AccountHelper) { activity.showAccountSelectLinear() } }
+            }
+            // The menu the app opens on: Films, Live TV or Radio (V5.0.24).
+            root.findViewById<View>(R.id.settings_cx_start)?.apply {
+                if (isLayout(TV)) { isFocusable = true; isFocusableInTouchMode = true }
+                setOnClickListener { view ->
+                    val ctx = view.context
+                    val keys = com.lagradost.cloudstream3.ui.live.CxLive.START_SCREENS
+                    val names = arrayOf("Filem", "Live TV", "Radio")
+                    val current = keys.indexOf(com.lagradost.cloudstream3.ui.live.CxLive.startScreen(ctx))
+                    androidx.appcompat.app.AlertDialog.Builder(ctx)
+                        .setTitle("Menu utama semasa buka app")
+                        .setSingleChoiceItems(names, current) { dialog, which ->
+                            com.lagradost.cloudstream3.ui.live.CxLive.setStartScreen(ctx, keys[which])
+                            android.widget.Toast.makeText(ctx, names[which] + " akan dibuka dahulu", android.widget.Toast.LENGTH_SHORT).show()
+                            dialog.dismiss()
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
             }""")
 
 # Any profile can be locked, also the first (default) one; the start-up picker cannot open the
