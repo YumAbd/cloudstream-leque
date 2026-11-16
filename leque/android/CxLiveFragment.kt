@@ -52,6 +52,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
+import com.lagradost.cloudstream3.utils.newDrmExtractorLink
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -86,11 +87,22 @@ class CxLiveGenerator(private val channels: List<LiveChannel>, title: String) : 
             path.endsWith(".mpd") -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
         }
-        val link = newExtractorLink("Live TV", c.name, c.url, type) {
-            referer = c.referer.orEmpty()
-            c.userAgent?.let { headers = mapOf("User-Agent" to it) }
+        val extra = HashMap<String, String>()
+        c.userAgent?.let { extra["User-Agent"] = it }
+        c.headersJson?.let { json -> runCatching { val o = org.json.JSONObject(json); o.keys().forEach { k -> extra[k] = o.getString(k) } } }
+        val drm = c.drm?.let { CxLive.drmParts(it) }
+        val link = if (drm != null) {
+            // Encrypted DASH/HLS (#KODIPROP): ClearKey keys or a Widevine/ClearKey license server.
+            newDrmExtractorLink("Live TV", c.name, c.url, if (type == ExtractorLinkType.VIDEO) ExtractorLinkType.DASH else type,
+                if (drm[0] == "widevine") com.lagradost.cloudstream3.utils.WIDEVINE_UUID else com.lagradost.cloudstream3.utils.CLEARKEY_UUID) {
+                referer = c.referer.orEmpty(); headers = extra
+                kid = drm[1]; key = drm[2]; licenseUrl = drm[3]
+                if (drm[1] != null) kty = "oct"
+            }
+        } else newExtractorLink("Live TV", c.name, c.url, type) {
+            referer = c.referer.orEmpty(); headers = extra
         }
-        if (type in sourceTypes) callback(link to null)
+        if (link.type in sourceTypes) callback(link to null)
         return true
     }
 }
@@ -139,6 +151,8 @@ class CxLiveFragment : Fragment() {
     private var shown: List<LiveChannel> = emptyList()
     private var favourites: Set<String> = emptySet()
     private var loadJob: Job? = null
+    /** Kept while the fragment lives, so the search is still there after the player. */
+    private var lastQuery = ""
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { importFile(it) } }
 
@@ -176,6 +190,21 @@ class CxLiveFragment : Fragment() {
         background = states(20); isSelected = selected
         setPadding(dp(16), dp(9), dp(16), dp(9)); isFocusable = true; isClickable = true
         setOnClickListener { onClick() }
+    }
+
+    private fun categoryIcon(name: String): Int {
+        val n = name.lowercase()
+        fun has(vararg words: String) = words.any { n.contains(it) }
+        return when {
+            has("sport", "sukan", "bola", "football", "soccer", "liga", "league", "espn", "bein", "golf", "tennis", "racing", "wwe", "ufc") -> R.drawable.cx_cat_sport
+            has("movie", "filem", "film", "cinema", "hbo", "action", "drama", "series", "siri") -> R.drawable.cx_movie
+            has("news", "berita", "cnn", "bbc") -> R.drawable.cx_cat_news
+            has("kid", "kanak", "anak", "cartoon", "kartun", "anime", "children", "junior", "family") -> R.drawable.cx_cat_kids
+            has("music", "muzik", "musik", "lagu", "song", "radio", "mtv") -> R.drawable.cx_cat_music
+            has("relig", "agama", "islam", "quran", "christian", "dakwah", "ramadan") -> R.drawable.cx_cat_religion
+            has("docu", "dokumentari", "education", "pendidikan", "knowledge", "science", "discovery", "nature", "travel", "history") -> R.drawable.cx_cat_docu
+            else -> R.drawable.cx_cat_player
+        }
     }
 
     private fun initials(name: String) = name.split(' ', '-', '_').filter { it.isNotBlank() }.take(2)
@@ -219,7 +248,7 @@ class CxLiveFragment : Fragment() {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun afterTextChanged(s: Editable?) { render() }
+                override fun afterTextChanged(s: Editable?) { lastQuery = s?.toString().orEmpty(); render() }
             })
         }
         root.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(8) })
@@ -266,6 +295,8 @@ class CxLiveFragment : Fragment() {
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, back)
         if (radio) CxRadio.listener = { updateMiniBar() }
         updateMiniBar()
+        // The last search survives the player (the view is created again when coming back).
+        if (lastQuery.isNotEmpty()) search.setText(lastQuery)
         reload(fresh = true)
     }
 
@@ -442,11 +473,11 @@ class CxLiveFragment : Fragment() {
                 h.name.text = name
                 h.sub.text = count.toString() + if (radio) " stesen" else " saluran"
                 h.star.visibility = View.GONE
-                // The category shows the logo of its first channel that has one.
-                val sample = channels.firstOrNull { (position == 0 || it.group == name) && (it.logo != null || CxLogos.find(it) != null) }
-                val url = sample?.let { it.logo ?: CxLogos.find(it) }
-                h.initials.text = initials(name)
-                if (url != null) { h.initials.visibility = View.INVISIBLE; h.logo.alpha = 0.9f; h.logo.loadImage(url) } else { h.initials.visibility = View.VISIBLE; h.logo.setImageDrawable(null) }
+                // A category has no logo of its own: an icon for its kind (sports, movies, news...).
+                h.initials.visibility = View.INVISIBLE
+                h.logo.setImageResource(if (position == 0) R.drawable.cx_cat_all else categoryIcon(name))
+                h.logo.imageTintList = ColorStateList.valueOf(accent)
+                h.logo.setPadding(dp(22), dp(22), dp(22), dp(22))
                 holder.itemView.setOnClickListener { openCategory(if (position == 0) null else name) }
                 holder.itemView.setOnLongClickListener(null)
                 return
@@ -456,7 +487,8 @@ class CxLiveFragment : Fragment() {
             h.sub.text = if (c.isYoutube) "YouTube" else c.group
             h.star.visibility = if (c.key in favourites) View.VISIBLE else View.GONE
             h.initials.text = initials(c.name)
-            h.logo.alpha = 1f
+            h.logo.imageTintList = null
+            h.logo.setPadding(dp(10), dp(10), dp(10), dp(10))
             val logoUrl = c.logo ?: CxLogos.find(c)
             if (logoUrl != null) { h.initials.visibility = View.INVISIBLE; h.logo.loadImage(logoUrl) } else { h.initials.visibility = View.VISIBLE; h.logo.setImageDrawable(null) }
             holder.itemView.setOnClickListener { play(holder.bindingAdapterPosition) }

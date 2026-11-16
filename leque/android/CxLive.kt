@@ -19,6 +19,10 @@ data class LiveChannel(
     val referer: String? = null,
     /** tvg-id (e.g. TV1.my), used to find a logo when the playlist has none. */
     val tvgId: String? = null,
+    /** DRM from #KODIPROP: "clearkey|<kid hex>|<key hex>", "clearkey-url|<url>" or "widevine|<license url>". */
+    val drm: String? = null,
+    /** Extra request headers (#EXTHTTP), as JSON. */
+    val headersJson: String? = null,
 ) {
     val isYoutube get() = url.startsWith("youtube:")
     val key get() = url
@@ -108,11 +112,12 @@ object CxLive {
 
     // ---------------- favourites and recent ----------------
     private fun channelJson(c: LiveChannel) = JSONObject().put("name", c.name).put("url", c.url).put("logo", c.logo)
-        .put("group", c.group).put("ua", c.userAgent).put("ref", c.referer).put("tid", c.tvgId)
+        .put("group", c.group).put("ua", c.userAgent).put("ref", c.referer).put("tid", c.tvgId).put("drm", c.drm).put("hdr", c.headersJson)
     private fun channelFrom(o: JSONObject) = LiveChannel(o.optString("name"), o.optString("url"),
         o.optString("logo").takeIf { it.isNotEmpty() && it != "null" }, o.optString("group"),
         o.optString("ua").takeIf { it.isNotEmpty() && it != "null" }, o.optString("ref").takeIf { it.isNotEmpty() && it != "null" },
-        o.optString("tid").takeIf { it.isNotEmpty() && it != "null" })
+        o.optString("tid").takeIf { it.isNotEmpty() && it != "null" },
+        o.optString("drm").takeIf { it.isNotEmpty() && it != "null" }, o.optString("hdr").takeIf { it.isNotEmpty() && it != "null" })
     private fun readList(context: Context, key: String): List<LiveChannel> {
         val a = prefs(context).getString(key, null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
         return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map(::channelFrom)
@@ -192,16 +197,25 @@ object CxLive {
         val url = link.trim()
         if (!url.startsWith("http://") && !url.startsWith("https://")) throw LiveProblem("Link mesti bermula dengan http:// atau https://")
         xtreamFromLink(url)?.let { return xtream(it.server, it.username, it.password) }
-        val response = try { app.get(url, timeout = 90L) } catch (e: Exception) {
-            throw LiveProblem("Playlist tidak dapat dibuka (" + e.javaClass.simpleName + "). Semak link dan Internet.")
+        // Some playlist hosts only answer IPTV players (e.g. OTT Navigator): tried in turn.
+        var lastCode = 0
+        var lastError: Exception? = null
+        for (agent in PLAYER_AGENTS) {
+            val response = try {
+                if (agent == null) app.get(url, timeout = 90L) else app.get(url, headers = mapOf("User-Agent" to agent), timeout = 90L)
+            } catch (e: Exception) { lastError = e; continue }
+            val finalUrl = response.okhttpResponse.request.url.toString()
+            if (finalUrl != url) xtreamFromLink(finalUrl)?.let { return xtream(it.server, it.username, it.password) }
+            lastCode = response.code
+            if (response.code !in 200..299) continue
+            val body = response.text
+            if (!body.trimStart().startsWith("#EXTM3U") && !body.contains("#EXTINF")) continue
+            val list = parseM3u(body)
+            if (list.isNotEmpty()) return list
         }
-        val finalUrl = response.okhttpResponse.request.url.toString()
-        if (finalUrl != url) xtreamFromLink(finalUrl)?.let { return xtream(it.server, it.username, it.password) }
-        if (response.code !in 200..299) throw LiveProblem("Playlist tidak dapat dibuka (HTTP " + response.code + ").")
-        val body = response.text
-        if (!body.trimStart().startsWith("#EXTM3U") && !body.contains("#EXTINF"))
-            throw LiveProblem("Link ini bukan playlist (tiada saluran ditemui).")
-        return parseM3u(body).also { if (it.isEmpty()) throw LiveProblem("Playlist ini kosong.") }
+        if (lastCode == 0 && lastError != null) throw LiveProblem("Playlist tidak dapat dibuka (" + lastError.javaClass.simpleName + "). Semak link dan Internet.")
+        if (lastCode !in 200..299 && lastCode != 0) throw LiveProblem("Playlist tidak dapat dibuka (HTTP $lastCode).")
+        throw LiveProblem("Link ini bukan playlist (tiada saluran ditemui).")
     }
 
     /** Live channels through the Xtream Codes API. */
@@ -256,12 +270,57 @@ object CxLive {
         }.also { if (it.isEmpty()) throw LiveProblem("Tiada stesen radio ditemui.") }
     }
 
+    /** null = the app's own browser identity. */
+    private val PLAYER_AGENTS = listOf(null, "OTT Navigator/1.7.1.3 (Linux;Android 12; en; 1x7m7bt)", "Kodi/20.2 (Linux; Android 12) Android/12.0.0 Sys_CPU/aarch64 App_Bitness/64 Version/20.2", "TiviMate/4.7.0 (Android 12)")
+
+    private fun hexToB64Url(hex: String): String? {
+        val h = hex.trim().lowercase()
+        if (h.length % 2 != 0 || !h.all { it in "0123456789abcdef" }) return null
+        val bytes = ByteArray(h.length / 2) { h.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        return android.util.Base64.encodeToString(bytes, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+    }
+
+    /** #KODIPROP license_type + license_key -> the compact drm string of [LiveChannel]. */
+    private fun drmOf(type: String?, key: String?): String? {
+        val t = type?.lowercase() ?: return null
+        val k = key?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return when {
+            t.contains("widevine") -> if (k.startsWith("http")) "widevine|" + k.substringBefore('|') else null
+            t.contains("clearkey") -> when {
+                k.startsWith("http") -> "clearkey-url|" + k.substringBefore('|')
+                k.startsWith("{") -> runCatching {
+                    val first = JSONObject(k).getJSONArray("keys").getJSONObject(0)
+                    "clearkey-b64|" + first.getString("kid") + "|" + first.getString("k")
+                }.getOrNull()
+                else -> {
+                    // kid:key (hex), several separated by commas: the first pair.
+                    val pair = k.split(',').first().split(':')
+                    if (pair.size == 2) "clearkey|" + pair[0].trim() + "|" + pair[1].trim() else null
+                }
+            }
+            else -> null
+        }
+    }
+
+    /** The DRM part of a link for the player: (uuid name, kid b64, key b64, license url). */
+    fun drmParts(drm: String): List<String?>? {
+        val parts = drm.split('|')
+        return when (parts[0]) {
+            "clearkey" -> listOf("clearkey", hexToB64Url(parts.getOrNull(1).orEmpty()) ?: return null, hexToB64Url(parts.getOrNull(2).orEmpty()) ?: return null, null)
+            "clearkey-b64" -> listOf("clearkey", parts.getOrNull(1), parts.getOrNull(2), null)
+            "clearkey-url" -> listOf("clearkey", null, null, parts.getOrNull(1))
+            "widevine" -> listOf("widevine", null, null, parts.getOrNull(1))
+            else -> null
+        }
+    }
+
     private val attr = Regex("""([A-Za-z0-9_-]+)="([^"]*)"""")
 
     /** M3U / M3U8 playlist (IPTV format): #EXTINF attributes, #EXTGRP, #EXTVLCOPT and "url|Header=value". */
     fun parseM3u(text: String): List<LiveChannel> {
         val out = ArrayList<LiveChannel>()
         var name: String? = null; var logo: String? = null; var group: String? = null; var tid: String? = null
+        var licType: String? = null; var licKey: String? = null; var http: String? = null
         var ua: String? = null; var ref: String? = null; var grp: String? = null
         for (raw in text.lineSequence()) {
             val line = raw.trim()
@@ -278,6 +337,13 @@ object CxLive {
                     tid = attrs["tvg-id"]?.takeIf { it.isNotBlank() }
                 }
                 line.startsWith("#EXTGRP:", true) -> grp = line.substringAfter(':').trim().takeIf { it.isNotEmpty() }
+                line.startsWith("#KODIPROP:", true) -> {
+                    val prop = line.substringAfter(':')
+                    val key = prop.substringBefore('=').trim().lowercase(); val value = prop.substringAfter('=', "").trim()
+                    if (key.endsWith("license_type")) licType = value
+                    if (key.endsWith("license_key")) licKey = value
+                }
+                line.startsWith("#EXTHTTP:", true) -> http = line.substringAfter(':').trim().takeIf { it.startsWith("{") }
                 line.startsWith("#EXTVLCOPT:", true) -> {
                     val opt = line.substringAfter(':')
                     val key = opt.substringBefore('=').trim().lowercase(); val value = opt.substringAfter('=', "").trim()
@@ -298,10 +364,10 @@ object CxLive {
                     }
                     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("youtube:")) {
                         out += LiveChannel(name?.takeIf { it.isNotBlank() } ?: "Saluran ${out.size + 1}", url, logo,
-                            group ?: grp ?: "Lain-lain", ua, ref, tid)
+                            group ?: grp ?: "Lain-lain", ua, ref, tid, drmOf(licType, licKey), http)
                         if (out.size >= MAX_CHANNELS) break
                     }
-                    name = null; logo = null; group = null; ua = null; ref = null; tid = null
+                    name = null; logo = null; group = null; ua = null; ref = null; tid = null; licType = null; licKey = null; http = null
                 }
             }
         }
