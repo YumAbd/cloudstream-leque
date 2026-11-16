@@ -278,7 +278,7 @@ class CxLiveFragment : Fragment() {
     }
 
     private fun updateSpan(widthPx: Int) {
-        if (widthPx <= 0) return
+        if (widthPx <= 0 || !isAdded) return
         val cell = dp(if (showingCategories) 170 else if (tv) 150 else 112)
         val span = maxOf(if (showingCategories) 2 else 3, widthPx / cell)
         if (gridLayout.spanCount != span) { gridLayout.spanCount = span; grid.adapter?.notifyDataSetChanged() }
@@ -353,10 +353,12 @@ class CxLiveFragment : Fragment() {
                     try {
                         val list = withContext(Dispatchers.IO) { CxLive.channels(ctx, source, fresh) }
                         if (current == id) show(list, "Tiada saluran dalam senarai ini.")
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         if (current == id) show(emptyList(), (e as? LiveProblem)?.message ?: ("Gagal memuatkan (" + e.javaClass.simpleName + ")."))
                     } finally {
-                        if (current == id) loading(false)
+                        if (current == id && isAdded && this@CxLiveFragment.view != null) loading(false)
                     }
                 }
             }
@@ -364,6 +366,7 @@ class CxLiveFragment : Fragment() {
     }
 
     private fun show(list: List<LiveChannel>, emptyText: String?) {
+        if (!isAdded || this.view == null) return
         channels = list
         groups = list.groupingBy { it.group }.eachCount().toList()
         if (group != null && groups.none { it.first == group }) group = null
@@ -601,6 +604,8 @@ class CxLiveFragment : Fragment() {
                 Toast.makeText(ctx, source.name + ": " + list.size + " saluran", Toast.LENGTH_LONG).show()
                 current = source.id
                 reload(fresh = false)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 loading(false)
                 val why = (e as? LiveProblem)?.message ?: ("Playlist tidak dapat ditambah (" + e.javaClass.simpleName + ").")
@@ -620,6 +625,8 @@ class CxLiveFragment : Fragment() {
                 val name = uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')?.take(40) ?: "Fail playlist"
                 if (CxLive.parseM3u(target.readText()).isEmpty()) { target.delete(); throw LiveProblem("Fail ini bukan playlist M3U.") }
                 saveOwn(LiveSource(id, name, "file", path = target.absolutePath, own = true))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 status.text = (e as? LiveProblem)?.message ?: "Fail tidak dapat dibaca."
             }
@@ -667,6 +674,8 @@ class CxLiveFragment : Fragment() {
                     }
                     if (state == "expired") { info.text = "Kod tamat tempoh. Tutup dan cuba lagi."; code.text = ""; qr.setImageDrawable(null); return@launch }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 info.text = if (CxWorkerActivation.serverCode(e) == "user_playlists_not_allowed") "Playlist sendiri tidak dibenarkan untuk lesen ini."
                 else "Kod tidak dapat diminta. Semak Internet dan cuba lagi."
@@ -720,6 +729,8 @@ class CxYoutubeActivity : androidx.appcompat.app.AppCompatActivity() {
     private suspend fun channelId(handle: String): String? = try {
         val page = com.lagradost.cloudstream3.app.get("https://www.youtube.com/" + handle.trimStart('/'), timeout = 30L).text
         Regex(""""(?:externalId|channelId)":"(UC[A-Za-z0-9_-]{22})"""").find(page)?.groupValues?.get(1)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
     } catch (e: Exception) { null }
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {

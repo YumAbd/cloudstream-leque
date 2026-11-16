@@ -228,8 +228,11 @@ patch(p,"""                Text(
             }""")
 patch(res+"layout/main_settings.xml",'            <TextView\n                android:id="@+id/settings_credits"',
       '            <TextView\n                android:id="@+id/settings_cx_profiles"\n                style="@style/SettingsItem"\n'
-      '                android:text="Profil &amp; kunci profil" />\n\n            <TextView\n                android:id="@+id/settings_cx_start"\n                style="@style/SettingsItem"\n'
-      '                android:text="Menu utama semasa buka app" />\n\n            <TextView\n                android:id="@+id/settings_credits"')
+      '                android:text="Profil &amp; kunci profil" />\n\n            <TextView\n                android:id="@+id/settings_credits"')
+# The first-screen choice is the first row of Settings.
+patch(res+"layout/main_settings.xml",'            <TextView\n                android:id="@+id/settings_general"',
+      '            <TextView\n                android:id="@+id/settings_cx_start"\n                style="@style/SettingsItem"\n'
+      '                android:text="Menu utama: Filem / Live TV / Radio" />\n\n            <TextView\n                android:id="@+id/settings_general"')
 patch(src+"ui/settings/SettingsFragment.kt","""            // Default focus on TV
             if (isLayout(TV)) {
                 settingsGeneral.requestFocus()
