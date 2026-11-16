@@ -229,10 +229,7 @@ patch(p,"""                Text(
 patch(res+"layout/main_settings.xml",'            <TextView\n                android:id="@+id/settings_credits"',
       '            <TextView\n                android:id="@+id/settings_cx_profiles"\n                style="@style/SettingsItem"\n'
       '                android:text="Profil &amp; kunci profil" />\n\n            <TextView\n                android:id="@+id/settings_credits"')
-# The first-screen choice is the first row of Settings.
-patch(res+"layout/main_settings.xml",'            <TextView\n                android:id="@+id/settings_general"',
-      '            <TextView\n                android:id="@+id/settings_cx_start"\n                style="@style/SettingsItem"\n'
-      '                android:text="Menu utama: Filem / Live TV / Radio" />\n\n            <TextView\n                android:id="@+id/settings_general"')
+
 patch(src+"ui/settings/SettingsFragment.kt","""            // Default focus on TV
             if (isLayout(TV)) {
                 settingsGeneral.requestFocus()
@@ -244,25 +241,6 @@ patch(src+"ui/settings/SettingsFragment.kt","""            // Default focus on T
             root.findViewById<View>(R.id.settings_cx_profiles)?.apply {
                 if (isLayout(TV)) { isFocusable = true; isFocusableInTouchMode = true }
                 setOnClickListener { with(com.lagradost.cloudstream3.ui.account.AccountHelper) { activity.showAccountSelectLinear() } }
-            }
-            // The menu the app opens on: Films, Live TV or Radio (V5.0.24).
-            root.findViewById<View>(R.id.settings_cx_start)?.apply {
-                if (isLayout(TV)) { isFocusable = true; isFocusableInTouchMode = true }
-                setOnClickListener { view ->
-                    val ctx = view.context
-                    val keys = com.lagradost.cloudstream3.ui.live.CxLive.START_SCREENS
-                    val names = arrayOf("Filem", "Live TV", "Radio")
-                    val current = keys.indexOf(com.lagradost.cloudstream3.ui.live.CxLive.startScreen(ctx))
-                    androidx.appcompat.app.AlertDialog.Builder(ctx)
-                        .setTitle("Menu utama semasa buka app")
-                        .setSingleChoiceItems(names, current) { dialog, which ->
-                            com.lagradost.cloudstream3.ui.live.CxLive.setStartScreen(ctx, keys[which])
-                            android.widget.Toast.makeText(ctx, names[which] + " akan dibuka dahulu", android.widget.Toast.LENGTH_SHORT).show()
-                            dialog.dismiss()
-                        }
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show()
-                }
             }""")
 
 # Any profile can be locked, also the first (default) one; the start-up picker cannot open the
@@ -274,6 +252,81 @@ patch(p,"""                    if (account.keyIndex != 0) {
 patch(p,"""            /** Long click -> edit without having to press the edit button for better UX */
             onAction(AccountAction.EditAccount(account))""","""            /** Long click -> edit without having to press the edit button for better UX */
             if (!AccountSelectActivity2.cxStartup) onAction(AccountAction.EditAccount(account))""")
+
+# Settings (the Compose screen the app shows): first screen, Live TV subtitles, profiles.
+p=src+"ui/settings/SettingsFragmentScreen.kt"
+patch(p,"""                            screens.forEach { settingsTab ->
+                                SettingsTab(settingsTab)
+                            }""","""                            CxSettingsRows()
+                            screens.forEach { settingsTab ->
+                                SettingsTab(settingsTab)
+                            }""")
+patch(p,"""    @Composable
+    fun SettingsTab(settingsTab: SettingsNavigation) {""","""    /** CloudXtream rows (V5.0.24): the menu the app opens on, Live TV subtitles, profiles and their lock. */
+    @Composable
+    fun CxSettingsRows() {
+        val ctx = LocalContext.current
+        val live = com.lagradost.cloudstream3.ui.live.CxLive
+        var start by remember { mutableStateOf(live.startScreenName(ctx)) }
+        var subs by remember { mutableStateOf(live.subtitleName(ctx)) }
+        TextPreferenceWidget(
+            title = "Menu utama",
+            icon = painterResource(R.drawable.cx_live_tv),
+            subtitle = start + " dibuka dahulu (Filem / Live TV / Radio)",
+            onPreferenceClick = { live.chooseStartScreen(ctx) { start = live.startScreenName(ctx) } })
+        TextPreferenceWidget(
+            title = "Sari kata Live TV",
+            icon = painterResource(R.drawable.ic_outline_subtitles_24),
+            subtitle = subs + " (Auto / English / Bahasa Melayu)",
+            onPreferenceClick = { live.chooseSubtitles(ctx) { subs = live.subtitleName(ctx) } })
+        TextPreferenceWidget(
+            title = "Profil & kunci profil",
+            icon = painterResource(R.drawable.ic_outline_account_circle_24),
+            subtitle = "Tambah, ubah atau kunci profil dengan PIN",
+            onPreferenceClick = {
+                activity?.navigate(R.id.accountSelectActivity, Bundle().apply { putBoolean("isFromMainActivity", true) })
+            })
+    }
+
+    @Composable
+    fun SettingsTab(settingsTab: SettingsNavigation) {""")
+
+# Live TV subtitles: the language chosen in Settings (Auto: Malay, else English, else the app's language).
+p=src+"ui/player/GeneratorPlayer.kt"
+patch(p,"""    private fun autoSelectSubtitles() {
+        //Log.i(TAG, "autoSelectSubtitles")
+        safe {
+""","""    private fun cxIsLive() = (currentMeta as? ExtractorUri)?.tvType == TvType.Live
+
+    /** True when a Live TV channel's subtitles were handled here. */
+    private fun cxLiveAutoSelect(): Boolean {
+        if (!cxIsLive()) return false
+        val ctx = context ?: return true
+        val live = com.lagradost.cloudstream3.ui.live.CxLive
+        val langs = live.subtitleLanguages(ctx, getAutoSelectLanguageTagIETF())
+        val current = player.getCurrentPreferredSubtitle()
+        if (current != null && langs.any { current.matchesLanguageCode(it) }) return true
+        val sub = langs.firstNotNullOfOrNull { l -> sortSubs(viewModel.state.subtitles).firstOrNull { it.matchesLanguageCode(l) } }
+            ?: return live.subtitleChoice(ctx) != "auto"
+        if (setSubtitles(sub, false)) {
+            player.saveData()
+            player.reloadPlayer(ctx)
+            player.handleEvent(CSPlayerEvent.Play)
+        }
+        return true
+    }
+
+    private fun autoSelectSubtitles() {
+        //Log.i(TAG, "autoSelectSubtitles")
+        if (cxLiveAutoSelect()) return
+        safe {
+""")
+patch(p,"""    private fun cxMaybeAutoSubtitles() {
+        val ctx = context ?: return
+""","""    private fun cxMaybeAutoSubtitles() {
+        val ctx = context ?: return
+        if (cxIsLive()) return // live channels: no online subtitle search
+""")
 
 for path,source in files.items():
     target=ROOT/path

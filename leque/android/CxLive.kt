@@ -107,6 +107,49 @@ object CxLive {
         if (screen in START_SCREENS) prefs(context).edit().putString("start_screen", screen).apply()
     }
 
+    private val START_NAMES = listOf("Filem", "Live TV", "Radio")
+    fun startScreenName(context: Context) = START_NAMES[START_SCREENS.indexOf(startScreen(context)).coerceAtLeast(0)]
+
+    /** Settings: choose the menu the app opens on. */
+    fun chooseStartScreen(context: Context, done: () -> Unit) {
+        androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("Menu utama semasa buka app")
+            .setSingleChoiceItems(START_NAMES.toTypedArray(), START_SCREENS.indexOf(startScreen(context))) { dialog, which ->
+                setStartScreen(context, START_SCREENS[which])
+                dialog.dismiss(); done()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // ---------------- Live TV subtitles ----------------
+    private val SUBTITLE_CHOICES = listOf("auto", "en", "ms")
+    private val SUBTITLE_NAMES = listOf("Auto", "English", "Bahasa Melayu")
+
+    /** "auto" (Malay, else English, else the app's subtitle language), "en" or "ms". */
+    fun subtitleChoice(context: Context): String =
+        prefs(context).getString("subtitles", null)?.takeIf { it in SUBTITLE_CHOICES } ?: "auto"
+    fun subtitleName(context: Context) = SUBTITLE_NAMES[SUBTITLE_CHOICES.indexOf(subtitleChoice(context)).coerceAtLeast(0)]
+
+    /** Language codes tried in turn for a Live TV channel's subtitles. */
+    fun subtitleLanguages(context: Context, appLanguage: String): List<String> = when (subtitleChoice(context)) {
+        "en" -> listOf("en", "eng")
+        "ms" -> listOf("ms", "may", "msa")
+        else -> listOf("ms", "may", "msa", "en", "eng", appLanguage)
+    }.filter { it.isNotBlank() }.distinct()
+
+    /** Settings: choose the default subtitles of Live TV. */
+    fun chooseSubtitles(context: Context, done: () -> Unit) {
+        androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("Sari kata Live TV")
+            .setSingleChoiceItems(SUBTITLE_NAMES.toTypedArray(), SUBTITLE_CHOICES.indexOf(subtitleChoice(context))) { dialog, which ->
+                prefs(context).edit().putString("subtitles", SUBTITLE_CHOICES[which]).apply()
+                dialog.dismiss(); done()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     /** Refreshes the server's answer (sources, first screen) in the background, at most every 6 hours. */
     fun refreshConfigIfOld(context: Context) {
         val app = context.applicationContext

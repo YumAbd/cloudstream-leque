@@ -153,6 +153,9 @@ class CxLiveFragment : Fragment() {
     private var loadJob: Job? = null
     /** Kept while the fragment lives, so the search is still there after the player. */
     private var lastQuery = ""
+    // Coming back from the player: the same list, category and scroll position, without reloading.
+    private var loadedOnce = false
+    private var restorePos = -1
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { importFile(it) } }
 
@@ -297,7 +300,8 @@ class CxLiveFragment : Fragment() {
         updateMiniBar()
         // The last search survives the player (the view is created again when coming back).
         if (lastQuery.isNotEmpty()) search.setText(lastQuery)
-        reload(fresh = true)
+        reload(fresh = !loadedOnce)
+        loadedOnce = true
     }
 
     override fun onDestroyView() {
@@ -343,8 +347,8 @@ class CxLiveFragment : Fragment() {
         loadJob?.cancel()
         favourites = CxLive.favouriteKeys(ctx, scope)
         when (id) {
-            FAV -> { loading(false); show(CxLive.favourites(ctx, scope), "Tiada kegemaran lagi.\nTekan lama pada " + (if (radio) "stesen" else "saluran") + " untuk menambahnya.") }
-            RECENT -> { loading(false); show(CxLive.recent(ctx, scope), "Belum ada yang dimainkan.") }
+            FAV -> { loading(false); show(CxLive.favourites(ctx, scope), "Tiada kegemaran lagi.\nTekan lama pada " + (if (radio) "stesen" else "saluran") + " untuk menambahnya."); restoreScroll() }
+            RECENT -> { loading(false); show(CxLive.recent(ctx, scope), "Belum ada yang dimainkan."); restoreScroll() }
             else -> {
                 val source = sources.firstOrNull { it.id == id } ?: return
                 loading(true); status.text = "Memuatkan " + source.name + "…"
@@ -352,7 +356,7 @@ class CxLiveFragment : Fragment() {
                 loadJob = viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val list = withContext(Dispatchers.IO) { CxLive.channels(ctx, source, fresh) }
-                        if (current == id) show(list, "Tiada saluran dalam senarai ini.")
+                        if (current == id) { show(list, "Tiada saluran dalam senarai ini."); restoreScroll() }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -365,11 +369,17 @@ class CxLiveFragment : Fragment() {
         }
     }
 
+    private fun restoreScroll() {
+        if (restorePos < 0 || !isAdded || this.view == null) return
+        if (shown.isNotEmpty()) grid.scrollToPosition(restorePos.coerceAtMost(shown.size - 1))
+        restorePos = -1
+    }
+
     private fun show(list: List<LiveChannel>, emptyText: String?) {
         if (!isAdded || this.view == null) return
         channels = list
         groups = list.groupingBy { it.group }.eachCount().toList()
-        if (group != null && groups.none { it.first == group }) group = null
+        if (group != null && list.isNotEmpty() && groups.none { it.first == group }) group = null
         // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
         if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {
             val ctx = context
@@ -430,6 +440,7 @@ class CxLiveFragment : Fragment() {
         val playable = shown.filter { !it.isYoutube }
         val at = playable.indexOf(c).coerceAtLeast(0)
         val listName = group?.takeIf { it != ALL } ?: sources.firstOrNull { it.id == current }?.name ?: title.text.toString()
+        restorePos = gridLayout.findFirstVisibleItemPosition()
         activity.navigate(R.id.global_to_navigation_player, GeneratorPlayer.newInstance(CxLiveGenerator(playable, listName), at))
     }
 
