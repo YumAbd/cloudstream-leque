@@ -31,6 +31,7 @@ files[src+"ui/live/CxLive.kt"]=(HERE/"android"/"CxLive.kt").read_text(encoding="
 files[src+"ui/live/CxLiveFragment.kt"]=(HERE/"android"/"CxLiveFragment.kt").read_text(encoding="utf8")
 files[src+"ui/live/CxXtream.kt"]=(HERE/"android"/"CxXtream.kt").read_text(encoding="utf8")
 files[src+"ui/settings/CxLiveSettings.kt"]=(HERE/"android"/"CxLiveSettings.kt").read_text(encoding="utf8")
+files[src+"ui/live/CxLiveManage.kt"]=(HERE/"android"/"CxLiveManage.kt").read_text(encoding="utf8")
 
 files[res+"drawable/cx_live_tv.xml"]='''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
@@ -264,6 +265,7 @@ patch(p,"""        SettingsNavigation(
             icon = R.drawable.cx_live_tv,
             subtitle = persistentListOf(
                 R.string.cx_live_source,
+                R.string.cx_live_manage,
                 R.string.cx_live_subs,
                 R.string.cx_live_adult
             )
@@ -329,6 +331,8 @@ CX_STRINGS={
  "cx_live_adult_confirm_text":("Adult (18+) categories and channels in IPTV playlists will be shown. They stay hidden in a Kids profile.","Kategori dan saluran dewasa (18+) dalam playlist IPTV akan ditunjukkan. Ia tetap tersembunyi dalam profil Kanak-kanak."),
  "cx_show":("Show","Tunjuk"),
  "cx_profile":("Profile","Profil"),
+ "cx_live_manage":("Manage playlists","Urus playlist"),
+ "cx_live_manage_sub":("Show or hide sources, arrange categories and channels","Tunjuk atau sembunyi sumber, susun kategori dan saluran"),
  "cx_profile_sub":("Add, edit or lock profiles with a PIN","Tambah, ubah atau kunci profil dengan PIN"),
 }
 for _path,_col in (("app/src/main/res/values/strings.xml",0),("app/src/main/res/values-b+ms/strings.xml",1)):
@@ -426,7 +430,7 @@ patch(p,"""    private fun cxIsLive() = (currentMeta as? ExtractorUri)?.tvType =
         if (!cxIsLive()) return false
         val ctx = context ?: return false
         val count = viewModel.cxVideoCount()
-        if (count <= 1) return false
+        if (count <= 1 && com.lagradost.cloudstream3.ui.live.CxLive.numbered.isEmpty()) return false
         cxTyped = (cxTyped + digit).takeLast(4)
         cxTypedToast?.cancel()
         cxTypedToast = Toast.makeText(ctx, "Saluran " + cxTyped, Toast.LENGTH_SHORT).also { it.show() }
@@ -434,11 +438,25 @@ patch(p,"""    private fun cxIsLive() = (currentMeta as? ExtractorUri)?.tvType =
         cxTypedHandler.postDelayed({
             val n = cxTyped.toIntOrNull() ?: 0
             cxTyped = ""
-            if (n in 1..viewModel.cxVideoCount() && isAdded) {
-                isNextEpisode = true
-                releasePlayer()
-                viewModel.loadThisEpisode(n - 1)
-            } else context?.let { Toast.makeText(it, "Tiada saluran " + n + " (1-" + viewModel.cxVideoCount() + ")", Toast.LENGTH_SHORT).show() }
+            if (!isAdded) return@postDelayed
+            val live = com.lagradost.cloudstream3.ui.live.CxLive
+            // The channel numbers of the source (the playlist's, the user's, else the position).
+            val target = live.byNumber(n)
+            val inList = target?.let { t -> live.playing.indexOfFirst { it.key == t.key } } ?: -1
+            when {
+                target != null && inList in 0 until viewModel.cxVideoCount() -> {
+                    isNextEpisode = true
+                    releasePlayer()
+                    viewModel.loadThisEpisode(inList)
+                }
+                target != null -> activity?.let { com.lagradost.cloudstream3.ui.live.cxOpenNumbered(it, target) }
+                live.numbered.isEmpty() && n in 1..viewModel.cxVideoCount() -> {
+                    isNextEpisode = true
+                    releasePlayer()
+                    viewModel.loadThisEpisode(n - 1)
+                }
+                else -> context?.let { Toast.makeText(it, "Tiada saluran " + n, Toast.LENGTH_SHORT).show() }
+            }
         }, 1500)
         return true
     }

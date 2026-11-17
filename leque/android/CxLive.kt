@@ -24,6 +24,8 @@ data class LiveChannel(
     val drm: String? = null,
     /** Extra request headers (#EXTHTTP), as JSON. */
     val headersJson: String? = null,
+    /** Channel number for the remote: tvg-chno / Xtream "num", the user's own number, else its position. */
+    val number: Int? = null,
 ) {
     val isYoutube get() = url.startsWith("youtube:")
     val key get() = url
@@ -181,12 +183,13 @@ object CxLive {
 
     // ---------------- favourites and recent ----------------
     private fun channelJson(c: LiveChannel) = JSONObject().put("name", c.name).put("url", c.url).put("logo", c.logo)
-        .put("group", c.group).put("ua", c.userAgent).put("ref", c.referer).put("tid", c.tvgId).put("drm", c.drm).put("hdr", c.headersJson)
+        .put("group", c.group).put("ua", c.userAgent).put("ref", c.referer).put("tid", c.tvgId).put("drm", c.drm).put("hdr", c.headersJson).put("num", c.number)
     private fun channelFrom(o: JSONObject) = LiveChannel(o.optString("name"), o.optString("url"),
         o.optString("logo").takeIf { it.isNotEmpty() && it != "null" }, o.optString("group"),
         o.optString("ua").takeIf { it.isNotEmpty() && it != "null" }, o.optString("ref").takeIf { it.isNotEmpty() && it != "null" },
         o.optString("tid").takeIf { it.isNotEmpty() && it != "null" },
-        o.optString("drm").takeIf { it.isNotEmpty() && it != "null" }, o.optString("hdr").takeIf { it.isNotEmpty() && it != "null" })
+        o.optString("drm").takeIf { it.isNotEmpty() && it != "null" }, o.optString("hdr").takeIf { it.isNotEmpty() && it != "null" },
+        if (o.has("num") && !o.isNull("num")) o.optInt("num").takeIf { it > 0 } else null)
     private fun readList(context: Context, key: String): List<LiveChannel> {
         val a = prefs(context).getString(key, null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
         return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map(::channelFrom)
@@ -236,6 +239,18 @@ object CxLive {
             ?: prefs(context).getString("guide_" + source.id, null)
     }
 
+    // ---------------- categories ----------------
+    private val spaces = Regex("[\\s\\u00A0\\u200B\\uFEFF]+")
+    /** "Malaysia", "MALAYSIA " and "MALAYSIA" are one category. */
+    fun groupKey(g: String) = g.replace(spaces, " ").trim().uppercase()
+    /** The categories of a channel: "MOVIES;HOT CHANNEL" is in both. */
+    fun groupParts(g: String): List<String> = g.split(';', '|').map { it.replace(spaces, " ").trim() }.filter { it.isNotEmpty() }
+
+    /** Set when Live TV shows a list: channel numbers for the remote, and the list being played. */
+    @Volatile var numbered: List<LiveChannel> = emptyList()
+    @Volatile var playing: List<LiveChannel> = emptyList()
+    fun byNumber(n: Int): LiveChannel? = numbered.firstOrNull { it.number == n }
+
     // ---------------- adult categories ----------------
     private val ADULT = Regex("(?i)(\\bxxx\\b|\\badults?\\b|18\\s*\\+|\\+\\s*18\\b|\\bporn|\\bsex|\\berotic|\\bnsfw\\b|\\bdewasa\\b|playboy|hustler|brazzers|redlight|\\bblue\\s*movie)")
     fun isAdult(c: LiveChannel) = ADULT.containsMatchIn(c.group) || ADULT.containsMatchIn(c.name)
@@ -260,6 +275,7 @@ object CxLive {
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
+    fun adultShown(context: Context) = prefs(context).getBoolean("show_adult", false)
     fun adultName(context: Context) = context.getString(if (prefs(context).getBoolean("show_adult", false)) com.lagradost.cloudstream3.R.string.cx_live_adult_shown else com.lagradost.cloudstream3.R.string.cx_live_adult_hidden)
 
     // ---------------- default source ----------------
@@ -273,20 +289,27 @@ object CxLive {
     fun defaultSourceId(context: Context, ids: List<String>): String? =
         prefs(context).getString("default_source", null)?.takeIf { it in ids } ?: "official".takeIf { it in ids } ?: ids.firstOrNull()
 
+    fun setDefaultSource(context: Context, id: String) = prefs(context).edit().putString("default_source", id).apply()
+
+    private fun shownTvSources(context: Context): List<LiveSource> {
+        val hidden = CxEdits.hiddenSources(context)
+        return tvSources(context).filter { it.id !in hidden }
+    }
+
     fun defaultSourceName(context: Context): String {
-        val list = tvSources(context)
+        val list = shownTvSources(context)
         val id = defaultSourceId(context, list.map { it.id }) ?: return "—"
-        return list.firstOrNull { it.id == id }?.name ?: "—"
+        return list.firstOrNull { it.id == id }?.let { CxEdits.nameOf(context, it) } ?: "—"
     }
 
     /** Settings: choose the source Live TV opens on. */
     fun chooseDefaultSource(context: Context, done: () -> Unit) {
-        val list = tvSources(context)
+        val list = shownTvSources(context)
         if (list.isEmpty()) { android.widget.Toast.makeText(context, com.lagradost.cloudstream3.R.string.cx_live_no_sources, android.widget.Toast.LENGTH_LONG).show(); return }
         val current = list.indexOfFirst { it.id == defaultSourceId(context, list.map { s -> s.id }) }
         androidx.appcompat.app.AlertDialog.Builder(context)
             .setTitle(com.lagradost.cloudstream3.R.string.cx_live_source)
-            .setSingleChoiceItems(list.map { it.name }.toTypedArray(), current) { dialog, which ->
+            .setSingleChoiceItems(list.map { CxEdits.nameOf(context, it) }.toTypedArray(), current) { dialog, which ->
                 prefs(context).edit().putString("default_source", list[which].id).apply()
                 dialog.dismiss(); done()
             }
@@ -398,6 +421,7 @@ object CxLive {
                 logo = s.optString("stream_icon").takeIf { it.startsWith("http") },
                 group = names[s.optString("category_id")]?.takeIf { it.isNotBlank() } ?: "Lain-lain",
                 tvgId = s.optString("epg_channel_id").takeIf { it.isNotBlank() && it != "null" },
+                number = s.optInt("num", 0).takeIf { it > 0 },
             )
         }.also { if (it.isEmpty()) throw LiveProblem("Akaun Xtream ini tiada saluran live.") }
     }
@@ -473,7 +497,7 @@ object CxLive {
         val out = ArrayList<LiveChannel>()
         var name: String? = null; var logo: String? = null; var group: String? = null; var tid: String? = null
         var licType: String? = null; var licKey: String? = null; var http: String? = null
-        var ua: String? = null; var ref: String? = null; var grp: String? = null
+        var ua: String? = null; var ref: String? = null; var grp: String? = null; var chno: Int? = null
         for (raw in text.lineSequence()) {
             val line = raw.trim()
             if (line.isEmpty()) continue
@@ -487,6 +511,7 @@ object CxLive {
                     logo = attrs["tvg-logo"]?.takeIf { it.startsWith("http") }
                     group = attrs["group-title"]?.takeIf { it.isNotBlank() }
                     tid = attrs["tvg-id"]?.takeIf { it.isNotBlank() }
+                    chno = (attrs["tvg-chno"] ?: attrs["channel-number"])?.trim()?.toIntOrNull()?.takeIf { it > 0 }
                 }
                 line.startsWith("#EXTGRP:", true) -> grp = line.substringAfter(':').trim().takeIf { it.isNotEmpty() }
                 line.startsWith("#KODIPROP:", true) -> {
@@ -516,10 +541,10 @@ object CxLive {
                     }
                     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("youtube:")) {
                         out += LiveChannel(name?.takeIf { it.isNotBlank() } ?: "Saluran ${out.size + 1}", url, logo,
-                            group ?: grp ?: "Lain-lain", ua, ref, tid, drmOf(licType, licKey), http)
+                            group ?: grp ?: "Lain-lain", ua, ref, tid, drmOf(licType, licKey), http, chno)
                         if (out.size >= MAX_CHANNELS) break
                     }
-                    name = null; logo = null; group = null; ua = null; ref = null; tid = null; licType = null; licKey = null; http = null
+                    name = null; logo = null; group = null; ua = null; ref = null; tid = null; licType = null; licKey = null; http = null; chno = null
                 }
             }
         }

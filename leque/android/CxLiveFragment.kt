@@ -157,6 +157,9 @@ class CxLiveFragment : Fragment() {
     private var loadJob: Job? = null
     /** Kept while the fragment lives, so the search is still there after the player. */
     private var lastQuery = ""
+    private var originals: Map<String, LiveSource> = emptyMap()
+    /** Re-reads the current list after the user changed its arrangement (same category and place). */
+    private fun refreshArrangement() { if (isAdded && view != null) { restorePos = gridLayout.findFirstVisibleItemPosition(); select(current, false, keepGroup = true) } }
     // Coming back from the player: the same list, category and scroll position, without reloading.
     private var loadedOnce = false
     private var restorePos = -1
@@ -334,7 +337,11 @@ class CxLiveFragment : Fragment() {
             val config = withContext(Dispatchers.IO) { CxLive.config(ctx, fresh) }
             allowOwn = config.allowOwn && !radio
             val admin = config.admin.filter { (it.media == "radio") == radio }
-            sources = if (radio) admin + CxLive.RADIO_MALAYSIA else admin + if (allowOwn) CxLive.ownSources(ctx) else emptyList()
+            val all = if (radio) admin + CxLive.RADIO_MALAYSIA else admin + if (allowOwn) CxLive.ownSources(ctx) else emptyList()
+            // The user's arrangement: hidden sources left out, renamed ones under their new name.
+            originals = all.associateBy { it.id }
+            val hidden = if (radio) emptySet() else CxEdits.hiddenSources(ctx)
+            sources = all.filter { it.id !in hidden }.map { it.copy(name = CxEdits.nameOf(ctx, it)) }
             addButton.visibility = if (allowOwn) View.VISIBLE else View.GONE
             phoneButton.visibility = if (allowOwn) View.VISIBLE else View.GONE
             val keep = current.takeIf { c -> c == FAV || c == RECENT || sources.any { it.id == c } }
@@ -348,7 +355,7 @@ class CxLiveFragment : Fragment() {
         val items = sources.map { it.id to it.name } + listOf(FAV to "★ Kegemaran", RECENT to "Baru dimainkan")
         for ((id, name) in items) {
             tabs.addView(chip(name, id == current) { if (id != current) select(id, false) }.apply {
-                setOnLongClickListener { sources.firstOrNull { it.id == id && it.own }?.let { confirmRemove(it) }; true }
+                setOnLongClickListener { sourceActions(id); true }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) })
         }
     }
@@ -371,7 +378,7 @@ class CxLiveFragment : Fragment() {
                 loadJob = viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val list = withContext(Dispatchers.IO) { CxLive.channels(ctx, source, fresh) }
-                        if (current == id) { show(list, "Tiada saluran dalam senarai ini."); restoreScroll(); loadGuide(source) }
+                        if (current == id) { show(if (radio) list else CxEdits.apply(ctx, id, list), "Tiada saluran dalam senarai ini."); restoreScroll(); loadGuide(source) }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -405,7 +412,7 @@ class CxLiveFragment : Fragment() {
     }
 
     private val spaces = Regex("[\\s\\u00A0\\u200B\\uFEFF]+")
-    private fun groupKey(g: String) = g.replace(spaces, " ").trim().uppercase()
+    private fun groupKey(g: String) = CxLive.groupKey(g)
 
     /** (key, display name) of each category of a channel; ";" or "|" separates several. */
     private fun groupsOf(c: LiveChannel): List<Pair<String, String>> {
@@ -430,7 +437,10 @@ class CxLiveFragment : Fragment() {
             for ((key, name) in of) { names.getOrPut(key) { name }; counts[key] = (counts[key] ?: 0) + 1 }
         }
         channelKeys = keys
-        groups = names.map { (key, name) -> name to (counts[key] ?: 0) }
+        val isSource = current != FAV && current != RECENT
+        val orderedNames = if (isSource && !radio) CxEdits.sortCategories(requireContext(), current, names.values.toList()) else names.values.toList()
+        groups = orderedNames.map { name -> name to (counts[groupKey(name)] ?: 0) }
+        if (isSource && !radio) CxLive.numbered = list
         if (group != null && group != ALL && list.isNotEmpty() && groups.none { groupKey(it.first) == groupKey(group!!) }) group = null
         // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
         if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {
@@ -506,6 +516,7 @@ class CxLiveFragment : Fragment() {
         }
         // The player moves through the channels of this list (CH+/CH-).
         val playable = list.filter { !it.isYoutube }.ifEmpty { listOf(c) }
+        CxLive.playing = playable
         val at = playable.indexOf(c).coerceAtLeast(0)
         val listName = group?.takeIf { it != ALL } ?: sources.firstOrNull { it.id == current }?.name ?: title.text.toString()
         restorePos = gridLayout.findFirstVisibleItemPosition()
@@ -561,7 +572,16 @@ class CxLiveFragment : Fragment() {
                 h.logo.imageTintList = ColorStateList.valueOf(accent)
                 h.logo.setPadding(dp(22), dp(22), dp(22), dp(22))
                 holder.itemView.setOnClickListener { openCategory(if (position == 0) null else name) }
-                holder.itemView.setOnLongClickListener(null)
+                holder.itemView.setOnLongClickListener {
+                    val ctx = context
+                    if (position == 0 || ctx == null || current == FAV || current == RECENT || radio) return@setOnLongClickListener false
+                    val t = { ms: String, en: String -> CxLiveManage.t(ctx, ms, en) }
+                    AlertDialog.Builder(ctx).setTitle(name).setItems(arrayOf(t("Tukar nama", "Rename"), t("Sembunyikan kategori", "Hide category"))) { _, which ->
+                        if (which == 0) CxLiveManage.renameCategory(ctx, current, name) { refreshArrangement() }
+                        else CxLiveManage.hideCategory(ctx, current, name) { refreshArrangement() }
+                    }.show()
+                    true
+                }
                 return
             }
             val c = shown[position]
@@ -571,7 +591,7 @@ class CxLiveFragment : Fragment() {
                 c.isYoutube -> "YouTube"
                 onNow != null -> "▶ " + onNow.title
                 else -> group?.takeIf { it != ALL } ?: groupsOf(c).firstOrNull()?.second ?: c.group
-            }
+            }.let { sub -> if (!radio && c.number != null && current != FAV && current != RECENT) "${c.number} · $sub" else sub }
             h.star.visibility = if (c.key in favourites) View.VISIBLE else View.GONE
             h.initials.text = initials(c.name)
             h.logo.imageTintList = null
@@ -579,7 +599,14 @@ class CxLiveFragment : Fragment() {
             val logoUrl = c.logo ?: CxLogos.find(c)
             if (logoUrl != null) { h.initials.visibility = View.INVISIBLE; h.logo.loadImage(logoUrl) } else { h.initials.visibility = View.VISIBLE; h.logo.setImageDrawable(null) }
             holder.itemView.setOnClickListener { play(holder.bindingAdapterPosition) }
-            holder.itemView.setOnLongClickListener { toggleFavourite(c, holder.bindingAdapterPosition); true }
+            holder.itemView.setOnLongClickListener {
+                val ctx = context ?: return@setOnLongClickListener true
+                val pos = holder.bindingAdapterPosition
+                val sourceId = current.takeIf { it != FAV && it != RECENT && !radio }
+                CxLiveManage.channelActions(ctx, sourceId, c, c.key in favourites, groups.map { it.first },
+                    toggleFavourite = { toggleFavourite(c, pos) }, done = { refreshArrangement() })
+                true
+            }
         }
     }
 
@@ -717,6 +744,16 @@ class CxLiveFragment : Fragment() {
         }
     }
 
+    private fun sourceActions(id: String) {
+        val ctx = context ?: return
+        val s = originals[id] ?: return
+        if (radio) { if (s.own) confirmRemove(s); return }
+        CxLiveManage.sourceActions(ctx, s,
+            edit = { CxLiveManage.editSource(ctx, s, { updated -> saveOwn(updated) }) { reload(fresh = false) } },
+            remove = if (s.own) ({ confirmRemove(s) }) else null,
+            done = { reload(fresh = false) })
+    }
+
     private fun confirmRemove(source: LiveSource) {
         val ctx = context ?: return
         AlertDialog.Builder(ctx).setTitle("Buang " + source.name + "?").setMessage("Playlist ini akan dibuang daripada peranti ini.")
@@ -833,4 +870,20 @@ class CxYoutubeActivity : androidx.appcompat.app.AppCompatActivity() {
         web.destroy()
         super.onDestroy()
     }
+}
+
+/** From the player: the channel typed on the remote, inside its own category (CH+/CH- move through it). */
+fun cxOpenNumbered(activity: android.app.Activity, target: LiveChannel) {
+    if (target.isYoutube) {
+        activity.startActivity(Intent(activity, CxYoutubeActivity::class.java).putExtra("channel", target.url.removePrefix("youtube:")).putExtra("title", target.name))
+        return
+    }
+    val first = CxLive.groupParts(target.group).firstOrNull()
+    val key = first?.let { CxLive.groupKey(it) }
+    val list = CxLive.numbered.filter { c -> !c.isYoutube && (key == null || CxLive.groupParts(c.group).any { CxLive.groupKey(it) == key }) }
+        .ifEmpty { listOf(target) }
+    val at = list.indexOfFirst { it.key == target.key }.coerceAtLeast(0)
+    CxLive.playing = list
+    runCatching { androidx.navigation.Navigation.findNavController(activity, R.id.nav_host_fragment).popBackStack() }
+    activity.navigate(R.id.global_to_navigation_player, GeneratorPlayer.newInstance(CxLiveGenerator(list, first ?: target.name), at))
 }

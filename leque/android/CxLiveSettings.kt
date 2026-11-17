@@ -25,6 +25,7 @@ object CxLiveSettingsScreen : SearchableSettings {
         val ctx = LocalContext.current
         var source by remember { mutableStateOf(CxLive.defaultSourceName(ctx)) }
         var subs by remember { mutableStateOf(CxLive.subtitleName(ctx)) }
+        var adultOn by remember { mutableStateOf(CxLive.adultShown(ctx)) }
         var adult by remember { mutableStateOf(CxLive.adultName(ctx)) }
         return persistentListOf(
             Preference.PreferenceItem.TextPreference(
@@ -40,10 +41,22 @@ object CxLiveSettingsScreen : SearchableSettings {
                 onClick = { CxLive.chooseSubtitles(ctx) { subs = CxLive.subtitleName(ctx) } },
             ),
             Preference.PreferenceItem.TextPreference(
+                title = stringResource(R.string.cx_live_manage),
+                subtitle = stringResource(R.string.cx_live_manage_sub),
+                icon = painterResource(R.drawable.cx_cat_all),
+                onClick = { com.lagradost.cloudstream3.ui.live.CxLiveManage.managePlaylists(ctx) { source = CxLive.defaultSourceName(ctx) } },
+            ),
+            Preference.PreferenceItem.TextPreference(
                 title = stringResource(R.string.cx_live_adult),
                 subtitle = adult,
                 icon = painterResource(R.drawable.video_locked),
-                onClick = { CxLive.toggleAdult(ctx) { adult = CxLive.adultName(ctx) } },
+                // On / off switch: show or hide adult (18+) categories (never in a Kids profile).
+                widget = {
+                    androidx.compose.material3.Switch(checked = adultOn, onCheckedChange = {
+                        CxLive.toggleAdult(ctx) { adultOn = CxLive.adultShown(ctx); adult = CxLive.adultName(ctx) }
+                    })
+                },
+                onClick = { CxLive.toggleAdult(ctx) { adultOn = CxLive.adultShown(ctx); adult = CxLive.adultName(ctx) } },
             ),
         )
     }
