@@ -108,14 +108,14 @@ object CxLive {
         if (screen in START_SCREENS) prefs(context).edit().putString("start_screen", screen).apply()
     }
 
-    private val START_NAMES = listOf("Filem", "Live TV", "Radio")
-    fun startScreenName(context: Context) = START_NAMES[START_SCREENS.indexOf(startScreen(context)).coerceAtLeast(0)]
+    private fun startNames(context: Context) = listOf(context.getString(com.lagradost.cloudstream3.R.string.cx_films), context.getString(com.lagradost.cloudstream3.R.string.cx_live_tv), context.getString(com.lagradost.cloudstream3.R.string.cx_radio))
+    fun startScreenName(context: Context) = startNames(context)[START_SCREENS.indexOf(startScreen(context)).coerceAtLeast(0)]
 
     /** Settings: choose the menu the app opens on. */
     fun chooseStartScreen(context: Context, done: () -> Unit) {
         androidx.appcompat.app.AlertDialog.Builder(context)
-            .setTitle("Menu utama semasa buka app")
-            .setSingleChoiceItems(START_NAMES.toTypedArray(), START_SCREENS.indexOf(startScreen(context))) { dialog, which ->
+            .setTitle(com.lagradost.cloudstream3.R.string.cx_main_menu)
+            .setSingleChoiceItems(startNames(context).toTypedArray(), START_SCREENS.indexOf(startScreen(context))) { dialog, which ->
                 setStartScreen(context, START_SCREENS[which])
                 dialog.dismiss(); done()
             }
@@ -125,12 +125,12 @@ object CxLive {
 
     // ---------------- Live TV subtitles ----------------
     private val SUBTITLE_CHOICES = listOf("auto", "en", "ms")
-    private val SUBTITLE_NAMES = listOf("Auto", "English", "Bahasa Melayu")
+    private fun subtitleNames(context: Context) = listOf(context.getString(com.lagradost.cloudstream3.R.string.cx_auto), "English", context.getString(com.lagradost.cloudstream3.R.string.cx_malay))
 
     /** "auto" (Malay, else English, else the app's subtitle language), "en" or "ms". */
     fun subtitleChoice(context: Context): String =
         prefs(context).getString("subtitles", null)?.takeIf { it in SUBTITLE_CHOICES } ?: "auto"
-    fun subtitleName(context: Context) = SUBTITLE_NAMES[SUBTITLE_CHOICES.indexOf(subtitleChoice(context)).coerceAtLeast(0)]
+    fun subtitleName(context: Context) = subtitleNames(context)[SUBTITLE_CHOICES.indexOf(subtitleChoice(context)).coerceAtLeast(0)]
 
     /** Language codes tried in turn for a Live TV channel's subtitles. */
     fun subtitleLanguages(context: Context, appLanguage: String): List<String> = when (subtitleChoice(context)) {
@@ -142,8 +142,8 @@ object CxLive {
     /** Settings: choose the default subtitles of Live TV. */
     fun chooseSubtitles(context: Context, done: () -> Unit) {
         androidx.appcompat.app.AlertDialog.Builder(context)
-            .setTitle("Sari kata Live TV")
-            .setSingleChoiceItems(SUBTITLE_NAMES.toTypedArray(), SUBTITLE_CHOICES.indexOf(subtitleChoice(context))) { dialog, which ->
+            .setTitle(com.lagradost.cloudstream3.R.string.cx_live_subs)
+            .setSingleChoiceItems(subtitleNames(context).toTypedArray(), SUBTITLE_CHOICES.indexOf(subtitleChoice(context))) { dialog, which ->
                 prefs(context).edit().putString("subtitles", SUBTITLE_CHOICES[which]).apply()
                 dialog.dismiss(); done()
             }
@@ -250,17 +250,49 @@ object CxLive {
     /** Settings: show or hide adult categories (never in a Kids profile). */
     fun toggleAdult(context: Context, done: () -> Unit) {
         if (kidsProfile(context)) {
-            android.widget.Toast.makeText(context, "Tidak dibenarkan dalam profil Kanak-kanak.", android.widget.Toast.LENGTH_LONG).show(); return
+            android.widget.Toast.makeText(context, com.lagradost.cloudstream3.R.string.cx_live_adult_kids, android.widget.Toast.LENGTH_LONG).show(); return
         }
         if (prefs(context).getBoolean("show_adult", false)) { prefs(context).edit().putBoolean("show_adult", false).apply(); done(); return }
         androidx.appcompat.app.AlertDialog.Builder(context)
-            .setTitle("Tunjuk kategori dewasa?")
-            .setMessage("Kategori dan saluran dewasa (18+) dalam playlist IPTV akan ditunjukkan. Ia tetap tersembunyi dalam profil Kanak-kanak.")
-            .setPositiveButton("Tunjuk") { _, _ -> prefs(context).edit().putBoolean("show_adult", true).apply(); done() }
+            .setTitle(com.lagradost.cloudstream3.R.string.cx_live_adult_confirm_title)
+            .setMessage(com.lagradost.cloudstream3.R.string.cx_live_adult_confirm_text)
+            .setPositiveButton(com.lagradost.cloudstream3.R.string.cx_show) { _, _ -> prefs(context).edit().putBoolean("show_adult", true).apply(); done() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
-    fun adultName(context: Context) = if (prefs(context).getBoolean("show_adult", false)) "Ditunjukkan" else "Disembunyikan"
+    fun adultName(context: Context) = context.getString(if (prefs(context).getBoolean("show_adult", false)) com.lagradost.cloudstream3.R.string.cx_live_adult_shown else com.lagradost.cloudstream3.R.string.cx_live_adult_hidden)
+
+    // ---------------- default source ----------------
+    /** The Live TV sources of this user: the admin's and, when allowed, the user's own. */
+    fun tvSources(context: Context): List<LiveSource> {
+        val config = config(context, false)
+        return config.admin.filter { it.media != "radio" } + if (config.allowOwn) ownSources(context) else emptyList()
+    }
+
+    /** The source Live TV opens on: the user's choice, else the official one (RTM Klik), else the first. */
+    fun defaultSourceId(context: Context, ids: List<String>): String? =
+        prefs(context).getString("default_source", null)?.takeIf { it in ids } ?: "official".takeIf { it in ids } ?: ids.firstOrNull()
+
+    fun defaultSourceName(context: Context): String {
+        val list = tvSources(context)
+        val id = defaultSourceId(context, list.map { it.id }) ?: return "—"
+        return list.firstOrNull { it.id == id }?.name ?: "—"
+    }
+
+    /** Settings: choose the source Live TV opens on. */
+    fun chooseDefaultSource(context: Context, done: () -> Unit) {
+        val list = tvSources(context)
+        if (list.isEmpty()) { android.widget.Toast.makeText(context, com.lagradost.cloudstream3.R.string.cx_live_no_sources, android.widget.Toast.LENGTH_LONG).show(); return }
+        val current = list.indexOfFirst { it.id == defaultSourceId(context, list.map { s -> s.id }) }
+        androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle(com.lagradost.cloudstream3.R.string.cx_live_source)
+            .setSingleChoiceItems(list.map { it.name }.toTypedArray(), current) { dialog, which ->
+                prefs(context).edit().putString("default_source", list[which].id).apply()
+                dialog.dismiss(); done()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
 
     suspend fun channels(context: Context, source: LiveSource, fresh: Boolean): List<LiveChannel> {
         if (source.kind == "m3u_text") return parseM3u(source.text.orEmpty())

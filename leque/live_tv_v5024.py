@@ -30,6 +30,7 @@ res="app/src/main/res/"
 files[src+"ui/live/CxLive.kt"]=(HERE/"android"/"CxLive.kt").read_text(encoding="utf8")
 files[src+"ui/live/CxLiveFragment.kt"]=(HERE/"android"/"CxLiveFragment.kt").read_text(encoding="utf8")
 files[src+"ui/live/CxXtream.kt"]=(HERE/"android"/"CxXtream.kt").read_text(encoding="utf8")
+files[src+"ui/settings/CxLiveSettings.kt"]=(HERE/"android"/"CxLiveSettings.kt").read_text(encoding="utf8")
 
 files[res+"drawable/cx_live_tv.xml"]='''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
@@ -253,7 +254,86 @@ patch(p,"""            /** Long click -> edit without having to press the edit b
             onAction(AccountAction.EditAccount(account))""","""            /** Long click -> edit without having to press the edit button for better UX */
             if (!AccountSelectActivity2.cxStartup) onAction(AccountAction.EditAccount(account))""")
 
-# Settings (the Compose screen the app shows): first screen, Live TV subtitles, profiles.
+# Settings (the Compose screen the app shows): Profile, General (with the main menu), Live TV, Player, Layout, Updates.
+p=src+"ui/settings/SettingsFragmentScreen.kt"
+patch(p,"""        SettingsNavigation(
+            title = R.string.category_player,""","""        SettingsNavigation(
+            title = R.string.cx_live_tv,
+            navigation = R.id.action_navigation_global_to_navigation_settings_cx_live,
+            screen = CxLiveSettingsScreen,
+            icon = R.drawable.cx_live_tv,
+            subtitle = persistentListOf(
+                R.string.cx_live_source,
+                R.string.cx_live_subs,
+                R.string.cx_live_adult
+            )
+        ),
+        SettingsNavigation(
+            title = R.string.category_player,""")
+patch(res+"navigation/mobile_navigation.xml","""    <action
+        android:id="@+id/action_navigation_global_to_navigation_settings_updates""","""    <action
+        android:id="@+id/action_navigation_global_to_navigation_settings_cx_live"
+        app:destination="@id/navigation_settings_cx_live"
+        app:enterAnim="@anim/enter_anim"
+        app:exitAnim="@anim/exit_anim"
+        app:popEnterAnim="@anim/enter_anim"
+        app:popExitAnim="@anim/exit_anim" />
+    <action
+        android:id="@+id/action_navigation_global_to_navigation_settings_updates""")
+patch(res+"navigation/mobile_navigation.xml","""    <fragment
+        android:id="@+id/navigation_settings_updates""","""    <fragment
+        android:id="@+id/navigation_settings_cx_live"
+        android:name="com.lagradost.cloudstream3.ui.settings.CxLiveSettings2"
+        android:label="@string/title_settings"
+        app:enterAnim="@anim/enter_anim"
+        app:exitAnim="@anim/exit_anim"
+        app:popEnterAnim="@anim/enter_anim"
+        app:popExitAnim="@anim/exit_anim" />
+
+    <fragment
+        android:id="@+id/navigation_settings_updates""")
+# General: the main menu first.
+p=src+"ui/settings/SettingsGeneralScreen.kt"
+patch(p,"""        return persistentListOf(
+            Preference.PreferenceGroup(title = stringResource(R.string.extension_language),""","""        val cxLive = com.lagradost.cloudstream3.ui.live.CxLive
+        var cxStart by remember { mutableStateOf(cxLive.startScreenName(context)) }
+        return persistentListOf(
+            Preference.PreferenceGroup(title = stringResource(R.string.cx_main_menu), preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(R.string.cx_main_menu),
+                    subtitle = stringResource(R.string.cx_main_menu_sub, cxStart),
+                    icon = painterResource(R.drawable.cx_live_tv),
+                    onClick = { cxLive.chooseStartScreen(context) { cxStart = cxLive.startScreenName(context) } },
+                )
+            )),
+            Preference.PreferenceGroup(title = stringResource(R.string.extension_language),""")
+
+# Text in the app's language: Malay for Bahasa Melayu, English otherwise.
+from xml.sax.saxutils import escape as _esc
+CX_STRINGS={
+ "cx_main_menu":("Main menu","Menu utama"),
+ "cx_main_menu_sub":("%1$s opens first (Films / Live TV / Radio)","%1$s dibuka dahulu (Filem / Live TV / Radio)"),
+ "cx_films":("Films","Filem"),
+ "cx_live_tv":("Live TV","Live TV"),
+ "cx_radio":("Radio","Radio"),
+ "cx_live_source":("Default source","Sumber lalai"),
+ "cx_live_no_sources":("No Live TV source yet.","Belum ada sumber Live TV."),
+ "cx_live_subs":("Subtitles","Sari kata"),
+ "cx_auto":("Auto","Auto"),
+ "cx_malay":("Malay","Bahasa Melayu"),
+ "cx_live_adult":("Adult (18+) categories","Kategori dewasa (18+)"),
+ "cx_live_adult_hidden":("Hidden · always hidden in a Kids profile","Disembunyikan · sentiasa tersembunyi dalam profil Kanak-kanak"),
+ "cx_live_adult_shown":("Shown · still hidden in a Kids profile","Ditunjukkan · tetap tersembunyi dalam profil Kanak-kanak"),
+ "cx_live_adult_kids":("Not allowed in a Kids profile.","Tidak dibenarkan dalam profil Kanak-kanak."),
+ "cx_live_adult_confirm_title":("Show adult categories?","Tunjuk kategori dewasa?"),
+ "cx_live_adult_confirm_text":("Adult (18+) categories and channels in IPTV playlists will be shown. They stay hidden in a Kids profile.","Kategori dan saluran dewasa (18+) dalam playlist IPTV akan ditunjukkan. Ia tetap tersembunyi dalam profil Kanak-kanak."),
+ "cx_show":("Show","Tunjuk"),
+ "cx_profile":("Profile","Profil"),
+ "cx_profile_sub":("Add, edit or lock profiles with a PIN","Tambah, ubah atau kunci profil dengan PIN"),
+}
+for _path,_col in (("app/src/main/res/values/strings.xml",0),("app/src/main/res/values-b+ms/strings.xml",1)):
+    _lines="".join('    <string name="'+k+'">'+_esc(v[_col])+'</string>\n' for k,v in CX_STRINGS.items())
+    patch(_path,"</resources>","    <!-- CloudXtream Live TV settings -->\n"+_lines+"</resources>")
 p=src+"ui/settings/SettingsFragmentScreen.kt"
 patch(p,"""                            screens.forEach { settingsTab ->
                                 SettingsTab(settingsTab)
@@ -262,27 +342,14 @@ patch(p,"""                            screens.forEach { settingsTab ->
                                 SettingsTab(settingsTab)
                             }""")
 patch(p,"""    @Composable
-    fun SettingsTab(settingsTab: SettingsNavigation) {""","""    /** CloudXtream rows (V5.0.24): the menu the app opens on, Live TV subtitles, profiles and their lock. */
+    fun SettingsTab(settingsTab: SettingsNavigation) {""","""    /** CloudXtream row: profiles and their lock (first row of Settings). */
     @Composable
     fun CxSettingsRows() {
         val ctx = LocalContext.current
-        val live = com.lagradost.cloudstream3.ui.live.CxLive
-        var start by remember { mutableStateOf(live.startScreenName(ctx)) }
-        var subs by remember { mutableStateOf(live.subtitleName(ctx)) }
         TextPreferenceWidget(
-            title = "Menu utama",
-            icon = painterResource(R.drawable.cx_live_tv),
-            subtitle = start + " dibuka dahulu (Filem / Live TV / Radio)",
-            onPreferenceClick = { live.chooseStartScreen(ctx) { start = live.startScreenName(ctx) } })
-        TextPreferenceWidget(
-            title = "Sari kata Live TV",
-            icon = painterResource(R.drawable.ic_outline_subtitles_24),
-            subtitle = subs + " (Auto / English / Bahasa Melayu)",
-            onPreferenceClick = { live.chooseSubtitles(ctx) { subs = live.subtitleName(ctx) } })
-        TextPreferenceWidget(
-            title = "Profil & kunci profil",
+            title = stringResource(R.string.cx_profile),
             icon = painterResource(R.drawable.ic_outline_account_circle_24),
-            subtitle = "Tambah, ubah atau kunci profil dengan PIN",
+            subtitle = stringResource(R.string.cx_profile_sub),
             onPreferenceClick = {
                 activity?.navigate(R.id.accountSelectActivity, Bundle().apply { putBoolean("isFromMainActivity", true) })
             })
@@ -378,15 +445,6 @@ patch(p,"""    private fun cxIsLive() = (currentMeta as? ExtractorUri)?.tvType =
 """)
 # Settings: adult categories row
 p=src+"ui/settings/SettingsFragmentScreen.kt"
-patch(p,"""        TextPreferenceWidget(
-            title = "Profil & kunci profil",""","""        var adult by remember { mutableStateOf(live.adultName(ctx)) }
-        TextPreferenceWidget(
-            title = "Kategori dewasa (18+) Live TV",
-            icon = painterResource(R.drawable.video_locked),
-            subtitle = adult + " · sentiasa tersembunyi dalam profil Kanak-kanak",
-            onPreferenceClick = { live.toggleAdult(ctx) { adult = live.adultName(ctx) } })
-        TextPreferenceWidget(
-            title = "Profil & kunci profil",""")
 # A crash that put the app in safe mode is reported once (admin panel, Telegram).
 patch(src+"MainActivity.kt","""            val builder: AlertDialog.Builder = AlertDialog.Builder(this)
             builder.setTitle(R.string.safe_mode_title)""","""            com.lagradost.cloudstream3.ui.live.CxCrash.report(this, lastError)

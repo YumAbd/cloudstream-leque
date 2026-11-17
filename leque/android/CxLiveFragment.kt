@@ -338,7 +338,8 @@ class CxLiveFragment : Fragment() {
             addButton.visibility = if (allowOwn) View.VISIBLE else View.GONE
             phoneButton.visibility = if (allowOwn) View.VISIBLE else View.GONE
             val keep = current.takeIf { c -> c == FAV || c == RECENT || sources.any { it.id == c } }
-            select(keep ?: sources.firstOrNull()?.id ?: FAV, fresh, keepGroup = keep != null)
+            val first = if (radio) sources.firstOrNull()?.id else CxLive.defaultSourceId(ctx, sources.map { it.id })
+            select(keep ?: first ?: FAV, fresh, keepGroup = keep != null)
         }
     }
 
