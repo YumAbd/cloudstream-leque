@@ -266,7 +266,24 @@ object CxWorkerActivation {
     private fun post(path: String, data: JSONObject, bearer: String? = null): JSONObject =
         request("POST",path,data,bearer)
 
-    private fun request(method: String,path: String,data: JSONObject? = null,bearer: String? = null): JSONObject {
+    /**
+     * A request signed by this device (Live TV, V5.0.24): a fresh challenge is signed like an online
+     * check. Returns the server's answer; throws IOException with the server error code on refusal.
+     */
+    fun signedPost(context: Context, path: String, extra: JSONObject = JSONObject(), maxBytes: Int = 600_000): JSONObject {
+        val deviceId=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getString(DEVICE_ID,null)
+            ?: throw IOException("not_activated")
+        val challenge=post("/api/device/challenge",JSONObject().put("purpose","verify").put("device_id",deviceId))
+        val challengeId=challenge.getString("challenge_id")
+        val nonce=challenge.getString("nonce")
+        val body=JSONObject(extra.toString()).put("device_id",deviceId).put("challenge_id",challengeId)
+            .put("signature",sign("CX-VERIFY\n$deviceId\n$challengeId\n$nonce")).put("signature_scheme",SIGNATURE_SCHEME)
+        return request("POST",path,body,null,maxBytes)
+    }
+    /** Server error code of a refused request (e.g. user_playlists_not_allowed), or null. */
+    fun serverCode(e: Throwable): String? = (e as? ApiProblem)?.code
+
+    private fun request(method: String,path: String,data: JSONObject? = null,bearer: String? = null,maxBytes: Int = MAX_RESPONSE): JSONObject {
         val connection=(URL(origin()+path).openConnection() as HttpsURLConnection).apply {
             CxTls.apply(this)
             requestMethod=method
@@ -281,7 +298,7 @@ object CxWorkerActivation {
             if(data!=null)connection.outputStream.use { it.write(data.toString().toByteArray(StandardCharsets.UTF_8)) }
             val responseCode=connection.responseCode
             val size=connection.contentLength
-            if(size>MAX_RESPONSE)throw IOException("response_too_large")
+            if(size>maxBytes)throw IOException("response_too_large")
             val input=if(responseCode in 200..299)connection.inputStream else connection.errorStream
             val bytes=input?.use { stream ->
                 val out=ByteArrayOutputStream()
@@ -290,7 +307,7 @@ object CxWorkerActivation {
                     val sizeRead=stream.read(chunk)
                     if(sizeRead<0)break
                     out.write(chunk,0,sizeRead)
-                    if(out.size()>MAX_RESPONSE)throw IOException("response_too_large")
+                    if(out.size()>maxBytes)throw IOException("response_too_large")
                 }
                 out.toByteArray()
             }?:ByteArray(0)
@@ -395,7 +412,7 @@ object CxWorkerActivation {
     fun licenseExpiresMs(context: Context): Long? = null
 
     /** "Report a problem" from the player; signed by this device like an online check. */
-    suspend fun reportProblem(context: Context, title: String, source: String, detail: String, appVersion: String): Boolean =
+    suspend fun reportProblem(context: Context, title: String, source: String, detail: String, appVersion: String, kind: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
                 val deviceId=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
@@ -409,7 +426,8 @@ object CxWorkerActivation {
                     .put("device_id",deviceId).put("challenge_id",challengeId)
                     .put("signature",proof).put("signature_scheme",SIGNATURE_SCHEME)
                     .put("title",title.take(200)).put("source",source.take(200))
-                    .put("detail",detail.take(500)).put("app_version",appVersion.take(20)))
+                    .put("detail",detail.take(if (kind == "crash") 3000 else 500)).put("app_version",appVersion.take(20))
+                    .apply { if (kind != null) put("kind",kind) })
                     .optBoolean("ok",false)
             } catch(e:Exception) {
                 recordProblem("report",e)
