@@ -21,6 +21,11 @@ on:
         required: true
         type: boolean
         default: true
+      publish:
+        description: Publish a GitHub Release (off = signed APK only as a workflow artifact, for testing; nothing is published)
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -336,7 +341,17 @@ jobs:
             adb shell dumpsys activity activities > out/api26-activities.txt
             grep -q 'CxActivationActivity' out/api26-activities.txt || { echo 'FAIL: expected activation screen on Android 8'; exit 1; }
             echo 'PASS: signed release installs and opens the activation screen on Android 8.0'
+      - name: Keep the signed APK as a workflow artifact only (not published)
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == false
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudXtream-release-candidate-${{ inputs.release_tag }}
+          path: |
+            out/CloudXtream-by-Leque-${{ inputs.release_tag }}.apk
+            out/SHA256SUMS.txt
+          retention-days: 14
       - name: Publish GitHub Release
+        if: github.event_name != 'workflow_dispatch' || inputs.publish != false
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
