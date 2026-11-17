@@ -268,7 +268,8 @@ class CxLiveFragment : Fragment() {
         grid = RecyclerView(ctx).apply {
             layoutManager = gridLayout; adapter = GridAdapter(); clipToPadding = false; setPadding(0, 0, 0, dp(24))
             // Columns follow the real width: correct after rotating, after the player and on TV.
-            addOnLayoutChangeListener { v, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) updateSpan(r - l) }
+            // (posted: a column change inside a layout pass is not always applied, e.g. back from a landscape player)
+            addOnLayoutChangeListener { v, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) v.post { updateSpan(v.width) } }
         }
         empty = TextView(ctx).apply { setTextColor(muted); textSize = 15f; gravity = Gravity.CENTER; setPadding(dp(24), dp(48), dp(24), dp(24)); visibility = View.GONE }
         root.addView(FrameLayout(ctx).apply {
@@ -284,7 +285,7 @@ class CxLiveFragment : Fragment() {
         if (widthPx <= 0 || !isAdded) return
         val cell = dp(if (showingCategories) 170 else if (tv) 150 else 112)
         val span = maxOf(if (showingCategories) 2 else 3, widthPx / cell)
-        if (gridLayout.spanCount != span) { gridLayout.spanCount = span; grid.adapter?.notifyDataSetChanged() }
+        if (gridLayout.spanCount != span) { gridLayout.spanCount = span; grid.adapter?.notifyDataSetChanged(); grid.requestLayout() }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -375,11 +376,32 @@ class CxLiveFragment : Fragment() {
         restorePos = -1
     }
 
+    private val spaces = Regex("[\\s\\u00A0\\u200B\\uFEFF]+")
+    private fun groupKey(g: String) = g.replace(spaces, " ").trim().uppercase()
+
+    /** (key, display name) of each category of a channel; ";" or "|" separates several. */
+    private fun groupsOf(c: LiveChannel): List<Pair<String, String>> {
+        val parts = c.group.split(';', '|').map { it.trim().replace(spaces, " ") }.filter { it.isNotEmpty() }
+        return (parts.ifEmpty { listOf(c.group.trim()) }).map { groupKey(it) to it }.distinctBy { it.first }
+    }
+
+    private var channelKeys: List<Set<String>> = emptyList()
+
     private fun show(list: List<LiveChannel>, emptyText: String?) {
         if (!isAdded || this.view == null) return
         channels = list
-        groups = list.groupingBy { it.group }.eachCount().toList()
-        if (group != null && list.isNotEmpty() && groups.none { it.first == group }) group = null
+        // Categories: "MOVIES;HOT CHANNEL" is in both; "Malaysia", "MALAYSIA " and "MALAYSIA" are one.
+        val names = LinkedHashMap<String, String>()
+        val counts = HashMap<String, Int>()
+        val keys = ArrayList<Set<String>>(list.size)
+        for (c in list) {
+            val of = groupsOf(c)
+            keys.add(of.map { it.first }.toSet())
+            for ((key, name) in of) { names.getOrPut(key) { name }; counts[key] = (counts[key] ?: 0) + 1 }
+        }
+        channelKeys = keys
+        groups = names.map { (key, name) -> name to (counts[key] ?: 0) }
+        if (group != null && group != ALL && list.isNotEmpty() && groups.none { groupKey(it.first) == groupKey(group!!) }) group = null
         // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
         if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {
             val ctx = context
@@ -399,8 +421,9 @@ class CxLiveFragment : Fragment() {
         val q = search.text?.toString()?.trim()?.lowercase().orEmpty()
         val byCategory = !radio && current != FAV && current != RECENT && groups.size > 1
         showingCategories = byCategory && group == null && q.isEmpty()
-        shown = if (showingCategories) emptyList() else channels.filter {
-            (group == null || group == ALL || q.isNotEmpty() || it.group == group) && (q.isEmpty() || it.name.lowercase().contains(q))
+        val key = group?.takeIf { it != ALL }?.let { groupKey(it) }
+        shown = if (showingCategories) emptyList() else channels.filterIndexed { i, it ->
+            (key == null || q.isNotEmpty() || channelKeys.getOrNull(i)?.contains(key) == true) && (q.isEmpty() || it.name.lowercase().contains(q))
         }
         back.isEnabled = byCategory && group != null
         crumb.visibility = if (byCategory && group != null && q.isEmpty()) View.VISIBLE else View.GONE
@@ -498,7 +521,7 @@ class CxLiveFragment : Fragment() {
             }
             val c = shown[position]
             h.name.text = c.name
-            h.sub.text = if (c.isYoutube) "YouTube" else c.group
+            h.sub.text = if (c.isYoutube) "YouTube" else (group?.takeIf { it != ALL } ?: groupsOf(c).firstOrNull()?.second ?: c.group)
             h.star.visibility = if (c.key in favourites) View.VISIBLE else View.GONE
             h.initials.text = initials(c.name)
             h.logo.imageTintList = null
