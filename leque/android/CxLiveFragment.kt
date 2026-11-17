@@ -133,6 +133,10 @@ class CxLiveFragment : Fragment() {
     private lateinit var tabs: LinearLayout
     private lateinit var search: EditText
     private lateinit var crumb: TextView
+    private lateinit var resumeBar: TextView
+    /** Now / next programmes of the current list (from its XMLTV guide), empty when it has none. */
+    private var guide: Map<String, List<CxEpg.Prog>> = emptyMap()
+    private var guideFor: String? = null
     private lateinit var grid: RecyclerView
     private lateinit var gridLayout: GridLayoutManager
     private lateinit var empty: TextView
@@ -264,6 +268,15 @@ class CxLiveFragment : Fragment() {
         }
         root.addView(crumb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(4) })
 
+        // "▶ Sambung: TV3": the last channel watched, one tap away.
+        resumeBar = TextView(ctx).apply {
+            textSize = 15f; setTextColor(fg); setSingleLine(true); ellipsize = TextUtils.TruncateAt.END
+            setTypeface(typeface, Typeface.BOLD); background = states(16)
+            setPadding(dp(16), dp(10), dp(16), dp(10)); isFocusable = true; isClickable = true; visibility = View.GONE
+            setOnClickListener { resumeLast() }
+        }
+        root.addView(resumeBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+
         gridLayout = GridLayoutManager(ctx, 3)
         grid = RecyclerView(ctx).apply {
             layoutManager = gridLayout; adapter = GridAdapter(); clipToPadding = false; setPadding(0, 0, 0, dp(24))
@@ -357,7 +370,7 @@ class CxLiveFragment : Fragment() {
                 loadJob = viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val list = withContext(Dispatchers.IO) { CxLive.channels(ctx, source, fresh) }
-                        if (current == id) { show(list, "Tiada saluran dalam senarai ini."); restoreScroll() }
+                        if (current == id) { show(list, "Tiada saluran dalam senarai ini."); restoreScroll(); loadGuide(source) }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -367,6 +380,20 @@ class CxLiveFragment : Fragment() {
                     }
                 }
             }
+        }
+    }
+
+    private fun loadGuide(source: LiveSource) {
+        if (radio) return
+        val ctx = context ?: return
+        val url = CxLive.guideUrl(ctx, source) ?: run { guide = emptyMap(); guideFor = null; return }
+        if (guideFor == url && guide.isNotEmpty()) return
+        val id = current
+        viewLifecycleOwner.lifecycleScope.launch {
+            val g = CxEpg.load(ctx, url)
+            if (current != id || !isAdded || this@CxLiveFragment.view == null) return@launch
+            guide = g; guideFor = url
+            if (g.isNotEmpty() && !showingCategories) grid.adapter?.notifyDataSetChanged()
         }
     }
 
@@ -387,8 +414,10 @@ class CxLiveFragment : Fragment() {
 
     private var channelKeys: List<Set<String>> = emptyList()
 
-    private fun show(list: List<LiveChannel>, emptyText: String?) {
+    private fun show(listIn: List<LiveChannel>, emptyText: String?) {
         if (!isAdded || this.view == null) return
+        // Adult (18+) categories: hidden unless shown in Settings; never in a Kids profile.
+        val list = if (radio || CxLive.adultAllowed(requireContext())) listIn else listIn.filter { !CxLive.isAdult(it) }
         channels = list
         // Categories: "MOVIES;HOT CHANNEL" is in both; "Malaysia", "MALAYSIA " and "MALAYSIA" are one.
         val names = LinkedHashMap<String, String>()
@@ -427,6 +456,9 @@ class CxLiveFragment : Fragment() {
         }
         back.isEnabled = byCategory && group != null
         crumb.visibility = if (byCategory && group != null && q.isEmpty()) View.VISIBLE else View.GONE
+        val last = if (radio || current == RECENT || q.isNotEmpty() || (byCategory && group != null)) null else context?.let { CxLive.recent(it, scope).firstOrNull() }
+        resumeBar.text = last?.let { "▶  Sambung tonton: " + it.name } ?: ""
+        resumeBar.visibility = if (last != null) View.VISIBLE else View.GONE
         crumb.text = "‹  Kategori  ·  " + (if (group == ALL) "Semua" else group ?: "")
         updateSpan(grid.width)
         grid.adapter?.notifyDataSetChanged()
@@ -451,6 +483,18 @@ class CxLiveFragment : Fragment() {
     // ---------------- play ----------------
     private fun play(index: Int) {
         val c = shown.getOrNull(index) ?: return
+        playChannel(c, shown)
+    }
+
+    /** The last channel watched, inside its category (CH+/CH- move through it) when it is in this list. */
+    private fun resumeLast() {
+        val ctx = context ?: return
+        val c = CxLive.recent(ctx, scope).firstOrNull() ?: return
+        val same = channels.filter { it.group == c.group }
+        playChannel(c, if (same.any { it.key == c.key }) same else listOf(c))
+    }
+
+    private fun playChannel(c: LiveChannel, list: List<LiveChannel>) {
         val ctx = context ?: return
         CxLive.addRecent(ctx, c, scope)
         if (radio) { CxRadio.play(ctx, c); return }
@@ -460,7 +504,7 @@ class CxLiveFragment : Fragment() {
             return
         }
         // The player moves through the channels of this list (CH+/CH-).
-        val playable = shown.filter { !it.isYoutube }
+        val playable = list.filter { !it.isYoutube }.ifEmpty { listOf(c) }
         val at = playable.indexOf(c).coerceAtLeast(0)
         val listName = group?.takeIf { it != ALL } ?: sources.firstOrNull { it.id == current }?.name ?: title.text.toString()
         restorePos = gridLayout.findFirstVisibleItemPosition()
@@ -521,7 +565,12 @@ class CxLiveFragment : Fragment() {
             }
             val c = shown[position]
             h.name.text = c.name
-            h.sub.text = if (c.isYoutube) "YouTube" else (group?.takeIf { it != ALL } ?: groupsOf(c).firstOrNull()?.second ?: c.group)
+            val onNow = CxEpg.nowNext(guide, c).first
+            h.sub.text = when {
+                c.isYoutube -> "YouTube"
+                onNow != null -> "▶ " + onNow.title
+                else -> group?.takeIf { it != ALL } ?: groupsOf(c).firstOrNull()?.second ?: c.group
+            }
             h.star.visibility = if (c.key in favourites) View.VISIBLE else View.GONE
             h.initials.text = initials(c.name)
             h.logo.imageTintList = null

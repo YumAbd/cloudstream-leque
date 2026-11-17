@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CloudXtream V5.0.24: Live TV menu.
+"""CloudXtream V5.0.23 (with the mouse and keyboard changes): Live TV menu.
 
 - playlists from CloudXtream Control (the official free channels for everyone, others for chosen
   users) and, where the admin allows it, the user's own playlists: a link in any form (M3U,
@@ -21,15 +21,15 @@ def read(path):
 def patch(path,before,after):
     current=read(path)
     count=current.count(before)
-    if count!=1: sys.exit("FAIL: V5.0.24 anchor count="+str(count)+" in "+path+": "+before[:70])
+    if count!=1: sys.exit("FAIL: V5.0.23 Live TV anchor count="+str(count)+" in "+path+": "+before[:70])
     files[path]=current.replace(before,after,1)
 
-patch("gradle/libs.versions.toml",'versionCode = "50023"','versionCode = "50024"')
-patch("gradle/libs.versions.toml",'versionName = "5.0.23"','versionName = "5.0.24"')
+# Released together with the mouse/keyboard changes as 5.0.23 (no version change here).
 src="app/src/main/java/com/lagradost/cloudstream3/"
 res="app/src/main/res/"
 files[src+"ui/live/CxLive.kt"]=(HERE/"android"/"CxLive.kt").read_text(encoding="utf8")
 files[src+"ui/live/CxLiveFragment.kt"]=(HERE/"android"/"CxLiveFragment.kt").read_text(encoding="utf8")
+files[src+"ui/live/CxXtream.kt"]=(HERE/"android"/"CxXtream.kt").read_text(encoding="utf8")
 
 files[res+"drawable/cx_live_tv.xml"]='''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
@@ -55,13 +55,13 @@ files[res+"menu/cx_rail_menu.xml"]=HEAD+item("navigation_live","cx_live_tv","Liv
     item("navigation_downloads","netflix_download","@string/title_downloads")+item("navigation_settings","settings_icon_selector","@string/title_settings")+"</menu>\n"
 # Phone (portrait) bar, five items at most: More opens Library, Downloads and Settings.
 old=read(res+"menu/bottom_nav_menu.xml")
-if 'navigation_downloads' not in old or 'navigation_settings' not in old: sys.exit("FAIL: V5.0.24 unexpected bottom_nav_menu.xml")
+if 'navigation_downloads' not in old or 'navigation_settings' not in old: sys.exit("FAIL: V5.0.23 Live TV unexpected bottom_nav_menu.xml")
 files[res+"menu/bottom_nav_menu.xml"]=HEAD+item("navigation_live","cx_live_tv","Live TV")+item("navigation_home","cx_movie","Filem")+\
     item("navigation_search","search_icon","@string/title_search")+item("navigation_radio","cx_radio","Radio")+item("navigation_cx_more","cx_more","Lagi")+"</menu>\n"
 for layout in ("layout/activity_main.xml","layout/activity_main_tv.xml"):
     current=read(res+layout)
     new,n=re.subn(r'app:menu="@menu/bottom_nav_menu"(\s*\n\s*app:menuGravity)',r'app:menu="@menu/cx_rail_menu"\1',current)
-    if n!=1: sys.exit("FAIL: V5.0.24 rail menu anchor count="+str(n)+" in "+layout)
+    if n!=1: sys.exit("FAIL: V5.0.23 Live TV rail menu anchor count="+str(n)+" in "+layout)
     files[res+layout]=new
 
 patch(res+"navigation/mobile_navigation.xml",'''    <fragment
@@ -328,8 +328,81 @@ patch(p,"""    private fun cxMaybeAutoSubtitles() {
         if (cxIsLive()) return // live channels: no online subtitle search
 """)
 
+# Live TV on a TV remote: typing a channel number (1-9999) opens that channel of the list.
+p=src+"ui/player/FullScreenPlayer.kt"
+patch(p,"""    private fun handleKeyDownEvent(keyCode: Int): Boolean? {
+        // adb shell input keyevent [INT]
+""","""    /** Live TV: a digit typed on the remote (true when used as a channel number). */
+    protected open fun cxChannelDigit(digit: Int): Boolean = false
+
+    private fun handleKeyDownEvent(keyCode: Int): Boolean? {
+        // adb shell input keyevent [INT]
+        val cxDigit = when (keyCode) {
+            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
+            in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - KeyEvent.KEYCODE_NUMPAD_0
+            else -> -1
+        }
+        if (cxDigit >= 0 && cxChannelDigit(cxDigit)) return true
+""")
+patch(src+"ui/player/PlayerGeneratorViewModel.kt","""    fun loadThisEpisode(index: Int) {""","""    fun cxVideoCount(): Int = generator?.videos?.size ?: 0
+
+    fun loadThisEpisode(index: Int) {""")
+p=src+"ui/player/GeneratorPlayer.kt"
+patch(p,"""    private fun cxIsLive() = (currentMeta as? ExtractorUri)?.tvType == TvType.Live
+""","""    private fun cxIsLive() = (currentMeta as? ExtractorUri)?.tvType == TvType.Live
+
+    private var cxTyped = ""
+    private var cxTypedToast: Toast? = null
+    private val cxTypedHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    override fun cxChannelDigit(digit: Int): Boolean {
+        if (!cxIsLive()) return false
+        val ctx = context ?: return false
+        val count = viewModel.cxVideoCount()
+        if (count <= 1) return false
+        cxTyped = (cxTyped + digit).takeLast(4)
+        cxTypedToast?.cancel()
+        cxTypedToast = Toast.makeText(ctx, "Saluran " + cxTyped, Toast.LENGTH_SHORT).also { it.show() }
+        cxTypedHandler.removeCallbacksAndMessages(null)
+        cxTypedHandler.postDelayed({
+            val n = cxTyped.toIntOrNull() ?: 0
+            cxTyped = ""
+            if (n in 1..viewModel.cxVideoCount() && isAdded) {
+                isNextEpisode = true
+                releasePlayer()
+                viewModel.loadThisEpisode(n - 1)
+            } else context?.let { Toast.makeText(it, "Tiada saluran " + n + " (1-" + viewModel.cxVideoCount() + ")", Toast.LENGTH_SHORT).show() }
+        }, 1500)
+        return true
+    }
+""")
+# Settings: adult categories row
+p=src+"ui/settings/SettingsFragmentScreen.kt"
+patch(p,"""        TextPreferenceWidget(
+            title = "Profil & kunci profil",""","""        var adult by remember { mutableStateOf(live.adultName(ctx)) }
+        TextPreferenceWidget(
+            title = "Kategori dewasa (18+) Live TV",
+            icon = painterResource(R.drawable.video_locked),
+            subtitle = adult + " · sentiasa tersembunyi dalam profil Kanak-kanak",
+            onPreferenceClick = { live.toggleAdult(ctx) { adult = live.adultName(ctx) } })
+        TextPreferenceWidget(
+            title = "Profil & kunci profil",""")
+# A crash that put the app in safe mode is reported once (admin panel, Telegram).
+patch(src+"MainActivity.kt","""            val builder: AlertDialog.Builder = AlertDialog.Builder(this)
+            builder.setTitle(R.string.safe_mode_title)""","""            com.lagradost.cloudstream3.ui.live.CxCrash.report(this, lastError)
+            val builder: AlertDialog.Builder = AlertDialog.Builder(this)
+            builder.setTitle(R.string.safe_mode_title)""")
+
+# Films: movies and series of the Xtream accounts the user can see, as providers (before plugins load).
+patch(src+"MainActivity.kt","""        ioSafe { SafeFile.check(this@MainActivity) }
+""","""        ioSafe { SafeFile.check(this@MainActivity) }
+        try { com.lagradost.cloudstream3.ui.live.CxXtream.register(this) } catch (e: Exception) {
+            android.util.Log.w("CxXtream", "Xtream providers not registered (" + e.javaClass.simpleName + ")")
+        }
+""")
+
 for path,source in files.items():
     target=ROOT/path
     target.parent.mkdir(parents=True,exist_ok=True)
     target.write_text(source,encoding="utf8")
-print("PASS: V5.0.24 Live TV",len(files),"files")
+print("PASS: V5.0.23 Live TV",len(files),"files")

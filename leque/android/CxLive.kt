@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.lagradost.cloudstream3.activation.CxWorkerActivation
 import com.lagradost.cloudstream3.app
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -157,7 +158,7 @@ object CxLive {
         val now = System.currentTimeMillis()
         if (now - p.getLong("config_ms", 0L) < 6 * 3600_000L) return
         p.edit().putLong("config_ms", now).apply()
-        Thread { try { config(app, true) } catch (_: Exception) {} }.start()
+        Thread { try { config(app, true); CxXtream.register(app) } catch (_: Exception) {} }.start()
     }
 
     fun ownSources(context: Context): List<LiveSource> {
@@ -216,9 +217,58 @@ object CxLive {
     /** Radio stations of Malaysia from Radio Browser (a public directory of stations' own streams). */
     val RADIO_MALAYSIA = LiveSource("radio-browser-my", "Radio Malaysia", "radio_browser", media = "radio")
 
+    // ---------------- guide (EPG) ----------------
+    /** The XMLTV guide of a playlist: #EXTM3U url-tvg / x-tvg-url (the first one), or Xtream's xmltv.php. */
+    fun guideOf(text: String): String? {
+        val head = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: return null
+        if (!head.startsWith("#EXTM3U", true)) return null
+        val attrs = attr.findAll(head).associate { it.groupValues[1].lowercase() to it.groupValues[2] }
+        return (attrs["url-tvg"] ?: attrs["x-tvg-url"])?.split(',')?.map { it.trim() }?.firstOrNull { it.startsWith("http") }
+    }
+    private fun xtreamGuide(server: String, username: String, password: String) =
+        server.trim().trimEnd('/') + "/xmltv.php?username=" + Uri.encode(username) + "&password=" + Uri.encode(password)
+
+    fun guideUrl(context: Context, source: LiveSource): String? = when (source.kind) {
+        "xtream" -> xtreamGuide(source.server.orEmpty(), source.username.orEmpty(), source.password.orEmpty())
+        "m3u_text" -> guideOf(source.text.orEmpty())
+        "radio_browser" -> null
+        else -> source.url?.let { xtreamFromLink(it) }?.let { xtreamGuide(it.server, it.username, it.password) }
+            ?: prefs(context).getString("guide_" + source.id, null)
+    }
+
+    // ---------------- adult categories ----------------
+    private val ADULT = Regex("(?i)(\\bxxx\\b|\\badults?\\b|18\\s*\\+|\\+\\s*18\\b|\\bporn|\\bsex|\\berotic|\\bnsfw\\b|\\bdewasa\\b|playboy|hustler|brazzers|redlight|\\bblue\\s*movie)")
+    fun isAdult(c: LiveChannel) = ADULT.containsMatchIn(c.group) || ADULT.containsMatchIn(c.name)
+    fun isAdultName(name: String) = ADULT.containsMatchIn(name)
+
+    private fun kidsProfile(context: Context) = com.lagradost.cloudstream3.ui.account.CxKids.isKids(context,
+        com.lagradost.cloudstream3.utils.DataStoreHelper.selectedKeyIndex)
+
+    /** Adult categories are hidden unless the user shows them; always hidden in a Kids profile. */
+    fun adultAllowed(context: Context) = prefs(context).getBoolean("show_adult", false) && !kidsProfile(context)
+
+    /** Settings: show or hide adult categories (never in a Kids profile). */
+    fun toggleAdult(context: Context, done: () -> Unit) {
+        if (kidsProfile(context)) {
+            android.widget.Toast.makeText(context, "Tidak dibenarkan dalam profil Kanak-kanak.", android.widget.Toast.LENGTH_LONG).show(); return
+        }
+        if (prefs(context).getBoolean("show_adult", false)) { prefs(context).edit().putBoolean("show_adult", false).apply(); done(); return }
+        androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("Tunjuk kategori dewasa?")
+            .setMessage("Kategori dan saluran dewasa (18+) dalam playlist IPTV akan ditunjukkan. Ia tetap tersembunyi dalam profil Kanak-kanak.")
+            .setPositiveButton("Tunjuk") { _, _ -> prefs(context).edit().putBoolean("show_adult", true).apply(); done() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+    fun adultName(context: Context) = if (prefs(context).getBoolean("show_adult", false)) "Ditunjukkan" else "Disembunyikan"
+
     suspend fun channels(context: Context, source: LiveSource, fresh: Boolean): List<LiveChannel> {
         if (source.kind == "m3u_text") return parseM3u(source.text.orEmpty())
-        if (source.kind == "file") return parseM3u(source.path?.let { File(it).takeIf(File::isFile)?.readText() }.orEmpty())
+        if (source.kind == "file") {
+            val text = source.path?.let { File(it).takeIf(File::isFile)?.readText() }.orEmpty()
+            guideOf(text).let { g -> prefs(context).edit().apply { if (g == null) remove("guide_" + source.id) else putString("guide_" + source.id, g) }.apply() }
+            return parseM3u(text)
+        }
         val stamp = (source.url ?: "") + "|" + (source.server ?: "") + "|" + (source.username ?: "") + "|" + (source.password ?: "")
         val cache = cacheFile(context, source.id + "|" + stamp)
         if (!fresh && cache.isFile && System.currentTimeMillis() - cache.lastModified() < REFRESH_MS) {
@@ -228,7 +278,9 @@ object CxLive {
             val list = when (source.kind) {
                 "xtream" -> xtream(source.server.orEmpty(), source.username.orEmpty(), source.password.orEmpty())
                 "radio_browser" -> radioBrowser("MY")
-                else -> fromLink(source.url.orEmpty())
+                else -> fromLink(source.url.orEmpty()) { g ->
+                    prefs(context).edit().apply { if (g == null) remove("guide_" + source.id) else putString("guide_" + source.id, g) }.apply()
+                }
             }
             cache.writeText(JSONArray(list.map(::channelJson)).toString())
             list
@@ -261,7 +313,7 @@ object CxLive {
      * A playlist link in any form: .m3u/.m3u8, a link without an extension, a shortlink (redirects
      * are followed) or a full Xtream link (handled through the Xtream API, also after a redirect).
      */
-    suspend fun fromLink(link: String): List<LiveChannel> {
+    suspend fun fromLink(link: String, guide: ((String?) -> Unit)? = null): List<LiveChannel> {
         val url = link.trim()
         if (!url.startsWith("http://") && !url.startsWith("https://")) throw LiveProblem("Link mesti bermula dengan http:// atau https://")
         xtreamFromLink(url)?.let { return xtream(it.server, it.username, it.password) }
@@ -279,7 +331,7 @@ object CxLive {
             val body = response.text
             if (!body.trimStart().startsWith("#EXTM3U") && !body.contains("#EXTINF")) continue
             val list = parseM3u(body)
-            if (list.isNotEmpty()) return list
+            if (list.isNotEmpty()) { guide?.invoke(guideOf(body)); return list }
         }
         if (lastCode == 0 && lastError != null) throw LiveProblem("Playlist tidak dapat dibuka (" + lastError.javaClass.simpleName + "). Semak link dan Internet.")
         if (lastCode !in 200..299 && lastCode != 0) throw LiveProblem("Playlist tidak dapat dibuka (HTTP $lastCode).")
@@ -460,6 +512,139 @@ object CxLive {
  * Logos for channels whose playlist has none: the public iptv-org channel database (downloaded at
  * most once a week). Matched by tvg-id (e.g. TV1.my) or by the channel name (Malaysian first).
  */
+/** Now and next programme of channels, from the playlist's XMLTV guide; kept 6 hours. */
+object CxEpg {
+    data class Prog(val start: Long, val stop: Long, val title: String)
+    private const val KEEP_MS = 6 * 3600_000L
+    private const val AHEAD_MS = 12 * 3600_000L
+    private val memory = HashMap<String, Pair<Long, Map<String, List<Prog>>>>()
+
+    fun key(s: String) = s.lowercase().replace(Regex("[^a-z0-9]"), "")
+    private fun sha(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+
+    suspend fun load(context: Context, url: String): Map<String, List<Prog>> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        synchronized(memory) { memory[url]?.takeIf { now - it.first < KEEP_MS }?.let { return@withContext it.second } }
+        val file = File(File(context.filesDir, "cx_live").apply { mkdirs() }, "epg_" + sha(url) + ".json")
+        var map: Map<String, List<Prog>>? = null
+        if (file.isFile && now - file.lastModified() < KEEP_MS) map = runCatching { fromJson(file.readText()) }.getOrNull()
+        if (map == null) {
+            map = try { download(url) } catch (e: Exception) {
+                android.util.Log.w("CxEpg", "Guide not loaded (" + e.javaClass.simpleName + ")"); null
+            }
+            if (map != null) runCatching { file.writeText(toJson(map)) }
+            else if (file.isFile) map = runCatching { fromJson(file.readText()) }.getOrNull()
+        }
+        val out = map ?: emptyMap()
+        synchronized(memory) { memory[url] = now to out }
+        out
+    }
+
+    /** The programme on now and the next one. */
+    fun nowNext(guide: Map<String, List<Prog>>, c: LiveChannel): Pair<Prog?, Prog?> {
+        if (guide.isEmpty()) return null to null
+        val list = c.tvgId?.let { guide[key(it)] } ?: guide["n:" + key(c.name)] ?: return null to null
+        val now = System.currentTimeMillis()
+        val i = list.indexOfFirst { it.start <= now && now < it.stop }
+        return if (i >= 0) list[i] to list.getOrNull(i + 1) else null to list.firstOrNull { it.start > now }
+    }
+
+    private val TIME = java.text.SimpleDateFormat("yyyyMMddHHmmss Z", java.util.Locale.US)
+    private fun time(v: String?): Long {
+        val t = v?.trim() ?: return 0L
+        return try {
+            synchronized(TIME) { TIME.parse(if (t.length > 14) t.substring(0, 14) + " " + t.substring(14).trim().ifEmpty { "+0000" } else "$t +0000")?.time ?: 0L }
+        } catch (e: Exception) { 0L }
+    }
+
+    private fun download(url: String): Map<String, List<Prog>> {
+        val request = okhttp3.Request.Builder().url(url).header("User-Agent", "OTT Navigator/1.7.1.3 (Linux;Android 12; en; 1x7m7bt)").build()
+        val client = app.baseClient.newBuilder().readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build()
+        client.newCall(request).execute().use { r ->
+            if (!r.isSuccessful) throw LiveProblem("EPG HTTP " + r.code)
+            val raw = java.io.BufferedInputStream(r.body?.byteStream() ?: throw LiveProblem("EPG kosong"))
+            raw.mark(4)
+            val gz = raw.read() == 0x1f && raw.read() == 0x8b
+            raw.reset()
+            val input = if (gz) java.util.zip.GZIPInputStream(raw) else raw
+            val parser = android.util.Xml.newPullParser()
+            parser.setInput(input, null)
+            val now = System.currentTimeMillis(); val until = now + AHEAD_MS
+            val names = HashMap<String, MutableList<String>>()
+            val progs = HashMap<String, MutableList<Prog>>()
+            var channel: String? = null
+            var pChannel: String? = null; var pStart = 0L; var pStop = 0L; var title: String? = null
+            var count = 0
+            var event = parser.eventType
+            while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT && count < 300_000) {
+                if (event == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    when (parser.name) {
+                        "channel" -> channel = parser.getAttributeValue(null, "id")
+                        "display-name" -> channel?.let { id -> names.getOrPut(id) { ArrayList() }.add(parser.nextText()) }
+                        "programme" -> {
+                            pChannel = parser.getAttributeValue(null, "channel"); title = null
+                            pStart = time(parser.getAttributeValue(null, "start")); pStop = time(parser.getAttributeValue(null, "stop"))
+                        }
+                        "title" -> if (pChannel != null && title == null) title = parser.nextText().trim()
+                    }
+                } else if (event == org.xmlpull.v1.XmlPullParser.END_TAG) {
+                    when (parser.name) {
+                        "channel" -> channel = null
+                        "programme" -> {
+                            val id = pChannel; val t = title
+                            if (id != null && !t.isNullOrEmpty() && pStop > now && pStart < until) {
+                                progs.getOrPut(id) { ArrayList() }.add(Prog(pStart, pStop, t)); count++
+                            }
+                            pChannel = null
+                        }
+                    }
+                }
+                event = parser.next()
+            }
+            val out = HashMap<String, List<Prog>>()
+            for ((id, list) in progs) {
+                val sorted = list.sortedBy { it.start }
+                out[key(id)] = sorted
+                names[id]?.forEach { n -> out.putIfAbsent("n:" + key(n), sorted) }
+            }
+            return out
+        }
+    }
+
+    private fun toJson(map: Map<String, List<Prog>>): String {
+        val o = JSONObject()
+        for ((k, list) in map) o.put(k, JSONArray(list.map { JSONArray().put(it.start).put(it.stop).put(it.title) }))
+        return o.toString()
+    }
+    private fun fromJson(text: String): Map<String, List<Prog>> {
+        val o = JSONObject(text); val out = HashMap<String, List<Prog>>()
+        for (k in o.keys()) {
+            val a = o.getJSONArray(k)
+            out[k] = (0 until a.length()).map { val p = a.getJSONArray(it); Prog(p.getLong(0), p.getLong(1), p.getString(2)) }
+        }
+        return out
+    }
+}
+
+/** A crash that put the app in safe mode is sent once to CloudXtream Control (admin panel and Telegram). */
+object CxCrash {
+    fun report(context: Context, error: String?) {
+        val text = error?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val app = context.applicationContext
+        val p = app.getSharedPreferences("cx_crash_reports", Context.MODE_PRIVATE)
+        val id = text.hashCode().toString()
+        if (p.getString("last", null) == id) return
+        val first = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        val at = text.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("at com.lagradost") || it.startsWith("at com.leque") }.orEmpty()
+        val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull().orEmpty()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val sent = CxWorkerActivation.reportProblem(app, "App crash (safe mode)", first.take(200),
+                (at + "\n" + text).take(3000), version, kind = "crash")
+            if (sent) p.edit().putString("last", id).apply()
+        }
+    }
+}
+
 object CxLogos {
     private const val URL = "https://raw.githubusercontent.com/iptv-org/database/master/data/logos.csv"
     private const val WEEK_MS = 7 * 24 * 3600_000L

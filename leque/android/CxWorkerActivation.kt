@@ -412,7 +412,7 @@ object CxWorkerActivation {
     fun licenseExpiresMs(context: Context): Long? = null
 
     /** "Report a problem" from the player; signed by this device like an online check. */
-    suspend fun reportProblem(context: Context, title: String, source: String, detail: String, appVersion: String): Boolean =
+    suspend fun reportProblem(context: Context, title: String, source: String, detail: String, appVersion: String, kind: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
                 val deviceId=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
@@ -426,7 +426,8 @@ object CxWorkerActivation {
                     .put("device_id",deviceId).put("challenge_id",challengeId)
                     .put("signature",proof).put("signature_scheme",SIGNATURE_SCHEME)
                     .put("title",title.take(200)).put("source",source.take(200))
-                    .put("detail",detail.take(500)).put("app_version",appVersion.take(20)))
+                    .put("detail",detail.take(if (kind == "crash") 3000 else 500)).put("app_version",appVersion.take(20))
+                    .apply { if (kind != null) put("kind",kind) })
                     .optBoolean("ok",false)
             } catch(e:Exception) {
                 recordProblem("report",e)
