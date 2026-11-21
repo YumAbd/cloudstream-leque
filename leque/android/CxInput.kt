@@ -85,12 +85,37 @@ object CxInput {
      * From Activity.dispatchKeyEvent, before the app's own handling. Returns true when the key was
      * used here. [search]: this activity has the Search page (MainActivity).
      */
+    private val FOCUS_KEYS = setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+        KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_TAB, KeyEvent.KEYCODE_NAVIGATE_NEXT, KeyEvent.KEYCODE_NAVIGATE_PREVIOUS)
+
+    /** True while [view] is still part of the window's view tree. */
+    private fun isInside(view: View, root: View): Boolean {
+        var p: Any? = view
+        while (p != null) {
+            if (p === root) return true
+            p = (p as? View)?.parent ?: return false
+        }
+        return false
+    }
+
     fun onKey(activity: Activity, event: KeyEvent?, search: Boolean): Boolean {
         if (event == null) return false
         if (event.keyCode == KeyEvent.KEYCODE_ESCAPE) {
             if (event.action == KeyEvent.ACTION_UP && !event.isCanceled)
                 (activity as? ComponentActivity)?.onBackPressedDispatcher?.onBackPressed() ?: activity.onBackPressed()
             return true
+        }
+        // A focused view taken off the screen (a list redrawn under the remote's focus) makes Android
+        // crash on the next arrow key ("parameter must be a descendant of this view"): focus goes back
+        // onto the screen instead.
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in FOCUS_KEYS) {
+            val focused = activity.currentFocus
+            val root = activity.window?.decorView
+            if (focused != null && root != null && !isInside(focused, root)) {
+                try { focused.clearFocus() } catch (_: Exception) {}
+                root.requestFocus(View.FOCUS_DOWN)
+                return true
+            }
         }
         if (!search || !isLayout(TV) || event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return false
         // The player uses letters as shortcuts while it is open.
