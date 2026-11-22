@@ -199,6 +199,7 @@ jobs:
           python3 leque/permanent_pin_v5022.py upstream
           python3 leque/tv_input_v5023.py upstream
           python3 leque/live_tv_v5024.py upstream
+          python3 leque/reports_v5025.py upstream
           .leque-icon-venv/bin/python leque/apply_branding.py upstream
           git -C upstream add -N app/src/main/java/com/lagradost/cloudstream3/activation/CxWorkerActivation.kt app/src/main/java/com/lagradost/cloudstream3/activation/CxActivationActivity.kt app/src/androidTest/java/com/lagradost/cloudstream3/activation/CxKeystoreProofTest.kt
           # The release tag sets the app version, so a new official CloudStream build can be
