@@ -195,10 +195,75 @@ object CxXtream {
                 else -> null
             }
         }.distinctBy { it.second.server.trimEnd('/') + "|" + it.second.username }
-        val wanted = logins.map { (label, login, _) -> CxXtreamProvider(label, login.server, login.username, login.password) }
+        val xtreamIds = logins.map { it.third.id }.toSet()
+        // Playlists (not Xtream) that had films the last time they were read.
+        val vod = (config.admin.filter { it.media == "tv" } + own)
+            .filter { it.id !in xtreamIds && it.kind != "radio_browser" && CxLive.vodCount(context, it.id) > 0 }
+            .map { CxPlaylistVodProvider(it) }
+        val wanted: List<MainAPI> = logins.map { (label, login, _) -> CxXtreamProvider(label, login.server, login.username, login.password) } + vod
         if (wanted.map { it.name + it.mainUrl } == registered.map { it.name + it.mainUrl }) return
         for (old in registered) { APIHolder.allProviders.remove(old); APIHolder.removePluginMapping(old) }
         registered.clear()
         for (api in wanted) { APIHolder.allProviders.add(api); APIHolder.addPluginMapping(api); registered += api }
+    }
+}
+
+/**
+ * Films inside a Live TV playlist (M3U entries that are video files, e.g. .mp4 / .mkv or an
+ * Xtream "/movie/" link): shown in the Films menu as "Playlist · <name>", by their categories.
+ */
+class CxPlaylistVodProvider(private val source: LiveSource) : MainAPI() {
+    override var name = "Playlist · " + source.name
+    override var mainUrl = "https://cloudxpanel.infopc.xyz"
+    override var lang = "ms"
+    override val hasMainPage = true
+    override val supportedTypes = setOf(TvType.Movie)
+    override val instantLinkLoading = true
+    private val PAGE = 60
+
+    private suspend fun films(): List<LiveChannel> {
+        val ctx = com.lagradost.cloudstream3.CloudStreamApp.context ?: return emptyList()
+        val all = CxLive.channels(ctx, source, false).filter { CxLive.isVod(it) }
+        return if (CxLive.adultAllowed(ctx)) all else all.filter { !CxLive.isAdult(it) }
+    }
+
+    override val mainPage: List<MainPageData>
+        get() = listOf(MainPageData("Semua filem", "", false)) +
+            CxXtream.cachedCategories(name).map { (data, title) -> MainPageData(title, data, false) }
+
+    private fun card(c: LiveChannel): SearchResponse = newMovieSearchResponse(c.name, "cxvod://" + c.url, TvType.Movie, fix = false) { posterUrl = c.logo }
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
+        val list = films()
+        if (page == 1 && request.data.isEmpty()) {
+            CxXtream.saveCategories(name, list.flatMap { CxLive.groupParts(it.group) }.distinct().take(20).map { it to it })
+        }
+        val shown = if (request.data.isEmpty()) list else list.filter { c -> CxLive.groupParts(c.group).any { it == request.data } }
+        return newHomePageResponse(HomePageList(request.name, shown.drop((page - 1) * PAGE).take(PAGE).map(::card)), hasNext = shown.size > page * PAGE)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        return films().filter { it.name.lowercase().contains(q) }.take(60).map(::card)
+    }
+
+    override suspend fun load(url: String): LoadResponse? {
+        val link = url.removePrefix("cxvod://")
+        val c = films().firstOrNull { it.url == link } ?: return null
+        return newMovieLoadResponse(c.name, url, TvType.Movie, url) {
+            posterUrl = c.logo
+            tags = CxLive.groupParts(c.group)
+        }
+    }
+
+    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+        val link = data.removePrefix("cxvod://")
+        val c = films().firstOrNull { it.url == link }
+        callback(newExtractorLink(name, c?.name ?: name, link) {
+            c?.referer?.let { referer = it }
+            c?.userAgent?.let { headers = mapOf("User-Agent" to it) }
+        })
+        return true
     }
 }

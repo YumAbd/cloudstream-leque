@@ -32,6 +32,7 @@ files[src+"ui/live/CxLiveFragment.kt"]=(HERE/"android"/"CxLiveFragment.kt").read
 files[src+"ui/live/CxXtream.kt"]=(HERE/"android"/"CxXtream.kt").read_text(encoding="utf8")
 files[src+"ui/settings/CxLiveSettings.kt"]=(HERE/"android"/"CxLiveSettings.kt").read_text(encoding="utf8")
 files[src+"ui/live/CxLiveManage.kt"]=(HERE/"android"/"CxLiveManage.kt").read_text(encoding="utf8")
+files[src+"ui/live/CxLivePlayer.kt"]=(HERE/"android"/"CxLivePlayer.kt").read_text(encoding="utf8")
 
 files[res+"drawable/cx_live_tv.xml"]='''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
@@ -155,6 +156,11 @@ patch("app/src/main/AndroidManifest.xml",'''        <activity android:name=".act
             android:exported="false" />''','''        <activity android:name=".activation.CxActivationActivity"
             android:exported="false" />
         <!-- Live TV: official YouTube live channels in YouTube's embedded player (V5.0.24). -->
+        <activity android:name=".ui.live.CxLivePlayerActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
+            android:screenOrientation="sensorLandscape"
+            android:supportsPictureInPicture="false"
+            android:exported="false" />
         <activity android:name=".ui.live.CxYoutubeActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
             android:screenOrientation="sensorLandscape"

@@ -256,6 +256,18 @@ object CxLive {
     fun isAdult(c: LiveChannel) = ADULT.containsMatchIn(c.group) || ADULT.containsMatchIn(c.name)
     fun isAdultName(name: String) = ADULT.containsMatchIn(name)
 
+    // ---------------- films inside playlists ----------------
+    private val VOD_EXT = Regex("(?i)\\.(mp4|mkv|avi|mov|webm|m4v|wmv|flv)(\\?|$)")
+    /** A film (video file), not a live channel: shown in the Films menu instead of Live TV. */
+    fun isVod(c: LiveChannel): Boolean {
+        val path = runCatching { Uri.parse(c.url).path.orEmpty() }.getOrDefault(c.url)
+        return VOD_EXT.containsMatchIn(path) || path.contains("/movie/") || path.contains("/series/")
+    }
+    fun vodCount(context: Context, sourceId: String) = prefs(context).getInt("vod_count_$sourceId", 0)
+    fun setVodCount(context: Context, sourceId: String, n: Int) {
+        if (vodCount(context, sourceId) != n) prefs(context).edit().putInt("vod_count_$sourceId", n).apply()
+    }
+
     private fun kidsProfile(context: Context) = com.lagradost.cloudstream3.ui.account.CxKids.isKids(context,
         com.lagradost.cloudstream3.utils.DataStoreHelper.selectedKeyIndex)
 
@@ -288,6 +300,10 @@ object CxLive {
     /** The source Live TV opens on: the user's choice, else the official one (RTM Klik), else the first. */
     fun defaultSourceId(context: Context, ids: List<String>): String? =
         prefs(context).getString("default_source", null)?.takeIf { it in ids } ?: "official".takeIf { it in ids } ?: ids.firstOrNull()
+
+    /** Live TV plays in the CloudXtream Live TV player, or in the app's movie player ("classic"). */
+    fun classicPlayer(context: Context) = prefs(context).getBoolean("classic_player", false)
+    fun setClassicPlayer(context: Context, on: Boolean) = prefs(context).edit().putBoolean("classic_player", on).apply()
 
     fun setDefaultSource(context: Context, id: String) = prefs(context).edit().putString("default_source", id).apply()
 
@@ -437,12 +453,15 @@ object CxLive {
         }
         val a = JSONArray(text)
         val seen = HashSet<String>()
-        return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull { o ->
+        val stations = (0 until a.length()).mapNotNull { a.optJSONObject(it) }
+        // An icon shared by several stations is a streaming host's logo, not the station's: left out.
+        val iconUse = stations.groupingBy { it.optString("favicon").trim() }.eachCount()
+        return stations.mapNotNull { o ->
             val url = o.optString("url_resolved").ifBlank { o.optString("url") }
             val name = o.optString("name").trim()
             if (!url.startsWith("http") || name.isEmpty() || !seen.add(name.lowercase())) return@mapNotNull null
-            LiveChannel(name, url, o.optString("favicon").takeIf { it.startsWith("http") },
-                o.optString("state").trim().ifEmpty { "Malaysia" })
+            val icon = o.optString("favicon").trim().takeIf { it.startsWith("http") && (iconUse[it] ?: 0) <= 2 }
+            LiveChannel(name, url, icon, o.optString("state").trim().ifEmpty { "Malaysia" })
         }.also { if (it.isEmpty()) throw LiveProblem("Tiada stesen radio ditemui.") }
     }
 
@@ -596,6 +615,10 @@ object CxEpg {
         synchronized(memory) { memory[url] = now to out }
         out
     }
+
+    /** Every programme of a channel in the guide (now and the next hours). */
+    fun programmes(guide: Map<String, List<Prog>>, c: LiveChannel): List<Prog> =
+        c.tvgId?.let { guide[key(it)] } ?: guide["n:" + key(c.name)] ?: emptyList()
 
     /** The programme on now and the next one. */
     fun nowNext(guide: Map<String, List<Prog>>, c: LiveChannel): Pair<Prog?, Prog?> {

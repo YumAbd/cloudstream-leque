@@ -25,6 +25,7 @@ object CxLiveSettingsScreen : SearchableSettings {
         val ctx = LocalContext.current
         var source by remember { mutableStateOf(CxLive.defaultSourceName(ctx)) }
         var subs by remember { mutableStateOf(CxLive.subtitleName(ctx)) }
+        var player by remember { mutableStateOf(playerName(ctx)) }
         var adultOn by remember { mutableStateOf(CxLive.adultShown(ctx)) }
         var adult by remember { mutableStateOf(CxLive.adultName(ctx)) }
         return persistentListOf(
@@ -33,6 +34,15 @@ object CxLiveSettingsScreen : SearchableSettings {
                 subtitle = source,
                 icon = painterResource(R.drawable.cx_live_tv),
                 onClick = { CxLive.chooseDefaultSource(ctx) { source = CxLive.defaultSourceName(ctx) } },
+            ),
+            Preference.PreferenceItem.TextPreference(
+                title = com.lagradost.cloudstream3.ui.live.CxLiveManage.t(ctx, "Pemain Live TV", "Live TV player"),
+                subtitle = player,
+                icon = painterResource(R.drawable.cx_live_tv),
+                onClick = {
+                    CxLive.setClassicPlayer(ctx, !CxLive.classicPlayer(ctx))
+                    player = playerName(ctx)
+                },
             ),
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(R.string.cx_live_subs),
@@ -61,6 +71,10 @@ object CxLiveSettingsScreen : SearchableSettings {
         )
     }
 }
+
+private fun playerName(ctx: android.content.Context) = if (CxLive.classicPlayer(ctx))
+    com.lagradost.cloudstream3.ui.live.CxLiveManage.t(ctx, "Klasik (pemain filem) · tekan untuk tukar", "Classic (movie player) · tap to change")
+else com.lagradost.cloudstream3.ui.live.CxLiveManage.t(ctx, "CloudXtream (gaya OTT: senarai saluran, jadual, ◀ ▶) · tekan untuk tukar", "CloudXtream (OTT style: channel list, schedule, ◀ ▶) · tap to change")
 
 /** Glue code to open the Live TV settings from the navigation graph. */
 class CxLiveSettings2 : BaseComposeFragment(), SearchableSettings by CxLiveSettingsScreen

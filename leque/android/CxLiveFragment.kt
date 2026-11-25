@@ -378,7 +378,18 @@ class CxLiveFragment : Fragment() {
                 loadJob = viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val list = withContext(Dispatchers.IO) { CxLive.channels(ctx, source, fresh) }
-                        if (current == id) { show(if (radio) list else CxEdits.apply(ctx, id, list), "Tiada saluran dalam senarai ini."); restoreScroll(); loadGuide(source) }
+                        // Films in the playlist go to the Films menu ("Playlist · <name>"), not here.
+                        val films = if (radio) 0 else list.count { CxLive.isVod(it) }
+                        if (!radio) {
+                            val before = CxLive.vodCount(ctx, id)
+                            CxLive.setVodCount(ctx, id, films)
+                            if ((before > 0) != (films > 0)) CxXtream.register(ctx)
+                        }
+                        val live = if (films > 0) list.filter { !CxLive.isVod(it) } else list
+                        if (current == id) {
+                            show(if (radio) live else CxEdits.apply(ctx, id, live), if (films > 0) "Senarai ini hanya ada filem: buka menu Filem → \"Playlist · " + source.name + "\"." else "Tiada saluran dalam senarai ini.")
+                            restoreScroll(); loadGuide(source)
+                        }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -520,7 +531,8 @@ class CxLiveFragment : Fragment() {
         val at = playable.indexOf(c).coerceAtLeast(0)
         val listName = group?.takeIf { it != ALL } ?: sources.firstOrNull { it.id == current }?.name ?: title.text.toString()
         restorePos = gridLayout.findFirstVisibleItemPosition()
-        activity.navigate(R.id.global_to_navigation_player, GeneratorPlayer.newInstance(CxLiveGenerator(playable, listName), at))
+        if (CxLive.classicPlayer(ctx)) activity.navigate(R.id.global_to_navigation_player, GeneratorPlayer.newInstance(CxLiveGenerator(playable, listName), at))
+        else CxLivePlayerActivity.start(ctx, playable, at, listName, guideFor.takeIf { current != FAV && current != RECENT })
     }
 
     private fun toggleFavourite(c: LiveChannel, position: Int) {
@@ -596,8 +608,17 @@ class CxLiveFragment : Fragment() {
             h.initials.text = initials(c.name)
             h.logo.imageTintList = null
             h.logo.setPadding(dp(10), dp(10), dp(10), dp(10))
-            val logoUrl = c.logo ?: CxLogos.find(c)
-            if (logoUrl != null) { h.initials.visibility = View.INVISIBLE; h.logo.loadImage(logoUrl) } else { h.initials.visibility = View.VISIBLE; h.logo.setImageDrawable(null) }
+            // Radio: the station's own icon only (the TV logo database matched wrong stations by name).
+            val logoUrl = c.logo ?: if (radio) null else CxLogos.find(c)
+            // A recycled tile is cleared first, so it never keeps another channel's picture;
+            // a picture that cannot be loaded shows the initials.
+            h.logo.loadImage(null as String?)
+            h.logo.setImageDrawable(null)
+            if (logoUrl != null) {
+                h.initials.visibility = View.INVISIBLE
+                val initials = h.initials
+                h.logo.loadImage(logoUrl) { listener(onError = { _, _ -> initials.visibility = View.VISIBLE }) }
+            } else h.initials.visibility = View.VISIBLE
             holder.itemView.setOnClickListener { play(holder.bindingAdapterPosition) }
             holder.itemView.setOnLongClickListener {
                 val ctx = context ?: return@setOnLongClickListener true
