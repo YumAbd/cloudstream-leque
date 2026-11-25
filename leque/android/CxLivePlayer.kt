@@ -96,6 +96,12 @@ class CxLivePlayerActivity : AppCompatActivity() {
     private lateinit var channelPanel: LinearLayout
     private lateinit var channelTitle: TextView
     private lateinit var channelList: RecyclerView
+    private lateinit var categoryList: RecyclerView
+    /** The channel list panel: every category of the source on the left, its channels on the right. */
+    private var allChannels: List<LiveChannel> = emptyList()
+    private var categories: List<String> = emptyList()
+    private var panelCategory = 0
+    private var panelChannels: List<LiveChannel> = emptyList()
     private lateinit var epgPanel: LinearLayout
     private lateinit var epgTitle: TextView
     private lateinit var epgList: LinearLayout
@@ -158,7 +164,7 @@ class CxLivePlayerActivity : AppCompatActivity() {
         root.addView(nextButton, FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER).apply { marginStart = dp(260) })
 
         root.addView(buildBar(), FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
-        root.addView(buildChannelPanel(), FrameLayout.LayoutParams(dp(360), -1, Gravity.START))
+        root.addView(buildChannelPanel(), FrameLayout.LayoutParams(dp(680).coerceAtMost(resources.displayMetrics.widthPixels), -1, Gravity.START))
         root.addView(buildEpgPanel(), FrameLayout.LayoutParams(-1, dp(260), Gravity.BOTTOM))
         setContentView(root)
 
@@ -225,8 +231,13 @@ class CxLivePlayerActivity : AppCompatActivity() {
         channelPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(panelBg); setPadding(dp(12), dp(20), dp(12), dp(12)); visibility = View.GONE }
         channelTitle = TextView(this).apply { setTextColor(fg); textSize = 17f; setTypeface(typeface, Typeface.BOLD); setPadding(dp(8), 0, dp(8), dp(10)) }
         channelPanel.addView(channelTitle)
+        val columns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        categoryList = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@CxLivePlayerActivity); adapter = CategoryAdapter() }
+        columns.addView(categoryList, LinearLayout.LayoutParams(dp(210), -1))
+        columns.addView(View(this).apply { setBackgroundColor(Color.argb(60, 255, 255, 255)) }, LinearLayout.LayoutParams(dp(1), -1).apply { setMargins(dp(6), 0, dp(6), 0) })
         channelList = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@CxLivePlayerActivity); adapter = ChannelAdapter() }
-        channelPanel.addView(channelList, LinearLayout.LayoutParams(-1, 0, 1f))
+        columns.addView(channelList, LinearLayout.LayoutParams(0, -1, 1f))
+        channelPanel.addView(columns, LinearLayout.LayoutParams(-1, 0, 1f))
         return channelPanel
     }
 
@@ -371,17 +382,59 @@ class CxLivePlayerActivity : AppCompatActivity() {
     private fun toggleBar() { if (bar.visibility == View.VISIBLE) hideBar.run() else showBar() }
 
     // ---------------- channel list (Up) ----------------
+    private fun rowBackground() = android.graphics.drawable.StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_focused), rounded(Color.argb(140, 56, 189, 248), 10))
+        addState(intArrayOf(android.R.attr.state_selected), rounded(Color.argb(70, 56, 189, 248), 10))
+        addState(intArrayOf(), rounded(Color.TRANSPARENT, 10))
+    }
+
+    /** Left column: "All" and every category of the source; moving onto one shows its channels. */
+    private inner class CategoryAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount() = categories.size
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val tv = TextView(parent.context).apply {
+                setTextColor(fg); textSize = 15f; setSingleLine(true); ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(10), dp(11), dp(10), dp(11)); isFocusable = true; isClickable = true; background = rowBackground()
+            }
+            return object : RecyclerView.ViewHolder(tv) {}
+        }
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            val tv = holder.itemView as TextView
+            val name = categories[position]
+            tv.text = name + "  (" + channelsOf(position).size + ")"
+            tv.isSelected = position == panelCategory
+            tv.setTypeface(null, if (position == panelCategory) Typeface.BOLD else Typeface.NORMAL)
+            tv.setOnClickListener { showCategory(holder.bindingAdapterPosition, focusChannels = true) }
+            tv.setOnFocusChangeListener { _, has -> if (has && holder.bindingAdapterPosition != panelCategory) showCategory(holder.bindingAdapterPosition, focusChannels = false) }
+        }
+    }
+
+    private fun channelsOf(category: Int): List<LiveChannel> {
+        if (category <= 0 || categories.size <= 1) return allChannels
+        val key = CxLive.groupKey(categories[category])
+        return allChannels.filter { c -> CxLive.groupParts(c.group).any { CxLive.groupKey(it) == key } }
+    }
+
+    private fun showCategory(position: Int, focusChannels: Boolean) {
+        if (position !in categories.indices) return
+        val old = panelCategory
+        panelCategory = position
+        panelChannels = channelsOf(position)
+        categoryList.adapter?.notifyItemChanged(old)
+        categoryList.adapter?.notifyItemChanged(position)
+        channelList.adapter?.notifyDataSetChanged()
+        val playing = panelChannels.indexOfFirst { it.key == list.getOrNull(index)?.key }.coerceAtLeast(0)
+        (channelList.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(playing, dp(120))
+        if (focusChannels) channelList.post { channelList.findViewHolderForAdapterPosition(playing)?.itemView?.requestFocus() ?: channelList.requestFocus() }
+    }
+
+    /** Right column: the channels of the chosen category, with what is on now (EPG). */
     private inner class ChannelAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-        override fun getItemCount() = list.size
+        override fun getItemCount() = panelChannels.size
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val row = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8))
-                isFocusable = true; isClickable = true
-                background = android.graphics.drawable.StateListDrawable().apply {
-                    addState(intArrayOf(android.R.attr.state_focused), rounded(Color.argb(140, 56, 189, 248), 10))
-                    addState(intArrayOf(android.R.attr.state_selected), rounded(Color.argb(70, 56, 189, 248), 10))
-                    addState(intArrayOf(), rounded(Color.TRANSPARENT, 10))
-                }
+                isFocusable = true; isClickable = true; background = rowBackground()
             }
             val num = TextView(parent.context).apply { setTextColor(muted); textSize = 13f; minWidth = dp(40) }
             val logo = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
@@ -394,26 +447,51 @@ class CxLivePlayerActivity : AppCompatActivity() {
             return object : RecyclerView.ViewHolder(row) {}
         }
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            val c = list[position]
+            val c = panelChannels[position]
             @Suppress("UNCHECKED_CAST") val v = holder.itemView.tag as Array<View>
             (v[0] as TextView).text = c.number?.toString() ?: (position + 1).toString()
             val logo = v[1] as ImageView
             logo.loadImage(null as String?); logo.setImageDrawable(null)
             (c.logo ?: CxLogos.find(c))?.let { logo.loadImage(it) }
             (v[2] as TextView).text = c.name
-            (v[3] as TextView).text = CxEpg.nowNext(guide, c).first?.title ?: ""
-            holder.itemView.isSelected = position == index
-            holder.itemView.setOnClickListener { play(position); closePanels() }
+            val (now, next) = CxEpg.nowNext(guide, c)
+            (v[3] as TextView).text = when {
+                now != null -> "▶ " + now.title + "  " + time.format(Date(now.start)) + "–" + time.format(Date(now.stop)) +
+                    (next?.let { "   ·   " + time.format(Date(it.start)) + " " + it.title } ?: "")
+                guide.isEmpty() -> ""
+                else -> t("Tiada jadual", "No schedule")
+            }
+            holder.itemView.isSelected = c.key == list.getOrNull(index)?.key
+            holder.itemView.setOnClickListener {
+                // The chosen category becomes the list: CH+ / CH- and Left / Right move through it.
+                val pos = holder.bindingAdapterPosition
+                if (pos !in panelChannels.indices) return@setOnClickListener
+                list = panelChannels
+                title = categories.getOrNull(panelCategory)?.takeIf { panelCategory > 0 } ?: title
+                CxLive.playing = list
+                play(pos); closePanels()
+            }
         }
     }
 
     private fun openChannels() {
         hideBar.run(); epgPanel.visibility = View.GONE
-        channelTitle.text = title.ifEmpty { t("Saluran", "Channels") } + "  (" + list.size + ")"
+        val current = list.getOrNull(index)
+        // The whole source when the list came from it (else just this list, e.g. Favourites).
+        allChannels = CxLive.numbered.takeIf { all -> all.isNotEmpty() && list.all { c -> all.any { it.key == c.key } } }
+            ?.filter { !it.isYoutube } ?: list
+        val names = if (allChannels === list) emptyList() else CxLive.categories.ifEmpty {
+            allChannels.flatMap { CxLive.groupParts(it.group) }.distinctBy { CxLive.groupKey(it) }
+        }
+        categories = listOf(t("Semua", "All")) + names
+        // Start on the category of the channel playing.
+        panelCategory = current?.let { c -> CxLive.groupParts(c.group).firstOrNull()?.let { g -> categories.indexOfFirst { CxLive.groupKey(it) == CxLive.groupKey(g) } } }
+            ?.takeIf { it > 0 && names.isNotEmpty() } ?: 0
+        channelTitle.text = t("Saluran", "Channels") + "   ·   " + t("◀ kategori   ▶ saluran", "◀ categories   ▶ channels")
         channelPanel.visibility = View.VISIBLE
-        channelList.adapter?.notifyDataSetChanged()
-        (channelList.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index, dp(120))
-        channelList.post { channelList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() ?: channelList.requestFocus() }
+        categoryList.adapter?.notifyDataSetChanged()
+        categoryList.scrollToPosition(panelCategory)
+        showCategory(panelCategory, focusChannels = true)
     }
 
     // ---------------- schedule (Down) ----------------
@@ -563,8 +641,18 @@ class CxLivePlayerActivity : AppCompatActivity() {
         }
         if (panelsOpen()) {
             if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE) { closePanels(); return true }
-            // Left from the channel list closes it; the schedule closes with Up from its top.
-            if (code == KeyEvent.KEYCODE_DPAD_RIGHT && channelPanel.visibility == View.VISIBLE) { closePanels(); return true }
+            // Between the two columns: back onto the chosen category, or onto the channel playing.
+            if (channelPanel.visibility == View.VISIBLE) {
+                if (code == KeyEvent.KEYCODE_DPAD_LEFT && channelList.hasFocus()) {
+                    categoryList.findViewHolderForAdapterPosition(panelCategory)?.itemView?.requestFocus() ?: categoryList.requestFocus(); return true
+                }
+                if (code == KeyEvent.KEYCODE_DPAD_RIGHT && categoryList.hasFocus()) {
+                    val playing = panelChannels.indexOfFirst { it.key == list.getOrNull(index)?.key }.coerceAtLeast(0)
+                    val lm = channelList.layoutManager as LinearLayoutManager
+                    val target = if (playing in lm.findFirstVisibleItemPosition()..lm.findLastVisibleItemPosition()) playing else lm.findFirstVisibleItemPosition()
+                    channelList.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus() ?: channelList.requestFocus(); return true
+                }
+            }
             return super.dispatchKeyEvent(event)
         }
         if (bar.visibility == View.VISIBLE) {

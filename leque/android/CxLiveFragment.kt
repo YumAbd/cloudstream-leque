@@ -451,7 +451,7 @@ class CxLiveFragment : Fragment() {
         val isSource = current != FAV && current != RECENT
         val orderedNames = if (isSource && !radio) CxEdits.sortCategories(requireContext(), current, names.values.toList()) else names.values.toList()
         groups = orderedNames.map { name -> name to (counts[groupKey(name)] ?: 0) }
-        if (isSource && !radio) CxLive.numbered = list
+        if (isSource && !radio) { CxLive.numbered = list; CxLive.categories = orderedNames }
         if (group != null && group != ALL && list.isNotEmpty() && groups.none { groupKey(it.first) == groupKey(group!!) }) group = null
         // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
         if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {

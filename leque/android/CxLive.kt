@@ -249,6 +249,8 @@ object CxLive {
     /** Set when Live TV shows a list: channel numbers for the remote, and the list being played. */
     @Volatile var numbered: List<LiveChannel> = emptyList()
     @Volatile var playing: List<LiveChannel> = emptyList()
+    /** The categories of [numbered], in the user's order (for the player's channel list). */
+    @Volatile var categories: List<String> = emptyList()
     fun byNumber(n: Int): LiveChannel? = numbered.firstOrNull { it.number == n }
 
     // ---------------- adult categories ----------------
