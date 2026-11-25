@@ -88,6 +88,37 @@ object CxInput {
     private val FOCUS_KEYS = setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
         KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_TAB, KeyEvent.KEYCODE_NAVIGATE_NEXT, KeyEvent.KEYCODE_NAVIGATE_PREVIOUS)
 
+    /**
+     * Arrow keys the screen did not use: the focus is moved here, as Android would do it, but a
+     * list redrawn under the remote (e.g. a Home row reloading) cannot crash the app with
+     * "parameter must be a descendant of this view"; that move is just skipped.
+     */
+    fun moveFocus(activity: Activity, event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN) return false
+        val direction = when (event.keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> View.FOCUS_UP
+            KeyEvent.KEYCODE_DPAD_DOWN -> View.FOCUS_DOWN
+            KeyEvent.KEYCODE_DPAD_LEFT -> View.FOCUS_LEFT
+            KeyEvent.KEYCODE_DPAD_RIGHT -> View.FOCUS_RIGHT
+            else -> return false
+        }
+        val root = activity.window?.decorView as? ViewGroup ?: return false
+        val focused = activity.currentFocus ?: return false
+        return try {
+            val next = focused.focusSearch(direction) ?: return false
+            if (next === focused) return true
+            val rect = Rect()
+            focused.getFocusedRect(rect)
+            root.offsetDescendantRectToMyCoords(focused, rect)
+            root.offsetRectIntoDescendantCoords(next, rect)
+            if (next.requestFocus(direction, rect)) focused.playSoundEffect(android.view.SoundEffectConstants.getContantForFocusDirection(direction))
+            true
+        } catch (e: IllegalArgumentException) {
+            android.util.Log.w("CxInput", "Focus move skipped: a list changed under the remote")
+            true
+        }
+    }
+
     /** True while [view] is still part of the window's view tree. */
     private fun isInside(view: View, root: View): Boolean {
         var p: Any? = view

@@ -67,6 +67,19 @@ patch(p,"""                            selectFileSelector.launch(Uri.EMPTY)""","
                                     android.widget.Toast.LENGTH_LONG).show()
                             }""")
 
+# Android TV: arrow-key focus moves are done by the app (no crash when a list is redrawn under the remote).
+patch(src+"MainActivity.kt","""    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        if (com.lagradost.cloudstream3.ui.CxInput.onKey(this, event, true)) true
+        else CommonActivity.dispatchKeyEvent(this, event) ?: super.dispatchKeyEvent(event)""","""    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (com.lagradost.cloudstream3.ui.CxInput.onKey(this, event, true)) return true
+        val handled = try {
+            CommonActivity.dispatchKeyEvent(this, event) ?: super.dispatchKeyEvent(event)
+        } catch (e: IllegalArgumentException) {
+            android.util.Log.w("CxInput", "Key skipped: a list changed under the remote"); true
+        }
+        return handled || com.lagradost.cloudstream3.ui.CxInput.moveFocus(this, event)
+    }""")
+
 for path,source in files.items():
     target=ROOT/path
     target.parent.mkdir(parents=True,exist_ok=True)
