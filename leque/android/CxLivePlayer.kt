@@ -218,6 +218,7 @@ class CxLivePlayerActivity : AppCompatActivity() {
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(12), 0, 0) }
         buttons.addView(barButton(R.drawable.cx_cat_all, t("Saluran", "Channels")) { openChannels() })
         buttons.addView(barButton(R.drawable.cx_cat_news, t("Jadual", "Schedule")) { openEpg() })
+        buttons.addView(barButton(R.drawable.cx_cat_player, t("Kualiti video", "Video quality")) { qualityDialog() })
         buttons.addView(barButton(R.drawable.ic_outline_subtitles_24, t("Audio & sari kata", "Audio & subtitles")) { tracksDialog() })
         favButton = barButton(R.drawable.cx_ic_star, t("Kegemaran", "Favourite")) { toggleFavourite() }
         buttons.addView(favButton)
@@ -260,7 +261,9 @@ class CxLivePlayerActivity : AppCompatActivity() {
         }.getOrElse { DefaultRenderersFactory(this).setEnableDecoderFallback(true) }
         return ExoPlayer.Builder(this, renderers).build().apply {
             // Subtitles in the language chosen in Settings > Live TV.
+            // The highest resolution the stream offers, unless the user picks one (Quality).
             trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setForceHighestSupportedBitrate(true)
                 .setPreferredTextLanguages(*CxLive.subtitleLanguages(this@CxLivePlayerActivity, "en").toTypedArray())
                 .build()
             addListener(object : Player.Listener {
@@ -523,6 +526,37 @@ class CxLivePlayerActivity : AppCompatActivity() {
     private fun closePanels() { channelPanel.visibility = View.GONE; epgPanel.visibility = View.GONE; video.requestFocus() }
 
     // ---------------- audio and subtitles ----------------
+    /** Video quality: Auto (highest) or one of the stream's resolutions (lower for a slow connection). */
+    private fun qualityDialog() {
+        data class Q(val label: String, val apply: () -> Unit)
+        val items = ArrayList<Q>()
+        val params = player.trackSelectionParameters
+        val forced = params.overrides.values.any { it.type == C.TRACK_TYPE_VIDEO }
+        items += Q(t("Auto (tertinggi)", "Auto (highest)") + if (!forced) "  ✓" else "") {
+            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_VIDEO).setForceHighestSupportedBitrate(true).build()
+        }
+        val tracks = ArrayList<Triple<androidx.media3.common.Tracks.Group, Int, androidx.media3.common.Format>>()
+        for (group in player.currentTracks.groups) {
+            if (group.type != C.TRACK_TYPE_VIDEO) continue
+            for (i in 0 until group.length) if (group.isTrackSupported(i)) tracks += Triple(group, i, group.getTrackFormat(i))
+        }
+        for ((group, i, f) in tracks.sortedByDescending { it.third.height * 10_000L + it.third.bitrate.coerceAtLeast(0) / 1000 }) {
+            val label = (if (f.height > 0) f.height.toString() + "p" else t("Trek ", "Track ") + (i + 1)) +
+                (f.bitrate.takeIf { it > 0 }?.let { String.format(Locale.US, "  ·  %.1f Mbps", it / 1_000_000.0) } ?: "")
+            val chosen = forced && group.isTrackSelected(i)
+            items += Q(label + if (chosen) "  ✓" else "") {
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .setForceHighestSupportedBitrate(false)
+                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i)).build()
+            }
+        }
+        if (tracks.size <= 1) items += Q(t("(Saluran ini hanya ada satu resolusi)", "(This channel has one resolution only)")) {}
+        AlertDialog.Builder(this).setTitle(t("Kualiti video", "Video quality"))
+            .setItems(items.map { it.label }.toTypedArray()) { _, which -> items[which].apply() }
+            .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
     private fun tracksDialog() {
         data class Choice(val label: String, val apply: () -> Unit)
         val items = ArrayList<Choice>()

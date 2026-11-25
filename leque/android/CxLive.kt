@@ -265,6 +265,68 @@ object CxLive {
         val path = runCatching { Uri.parse(c.url).path.orEmpty() }.getOrDefault(c.url)
         return VOD_EXT.containsMatchIn(path) || path.contains("/movie/") || path.contains("/series/")
     }
+    private val EPISODE = Regex("(?i)\\bS\\d{1,2}\\s*E\\d{1,3}\\b|\\bEp(isode)?\\.?\\s*\\d{1,3}\\b")
+    /** A series episode (Xtream "/series/" link or a name like "S01E02"); otherwise a film. */
+    fun isSeries(c: LiveChannel): Boolean {
+        val path = runCatching { Uri.parse(c.url).path.orEmpty() }.getOrDefault(c.url)
+        return c.url.startsWith("xtream-series:") || path.contains("/series/") || EPISODE.containsMatchIn(c.name)
+    }
+
+    // ---------------- Xtream films and series (Live TV "Movie Lists" / "Series Lists") ----------------
+    private suspend fun xtreamArray(login: XtreamLogin, action: String): JSONArray {
+        val base = login.server.trimEnd('/') + "/player_api.php?username=" + Uri.encode(login.username) + "&password=" + Uri.encode(login.password)
+        return CxXtream.cached("live|" + login.server + "|" + login.username + "|" + action) {
+            JSONArray(app.get("$base&action=$action", headers = mapOf("User-Agent" to PLAYER_AGENTS[1]!!), timeout = 120L).text)
+        }
+    }
+    private suspend fun xtreamCategoryNames(login: XtreamLogin, action: String): Map<String, String> {
+        val a = runCatching { xtreamArray(login, action) }.getOrDefault(JSONArray())
+        return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.associate { it.optString("category_id") to it.optString("category_name").trim() }
+    }
+    private fun play(login: XtreamLogin, kind: String, id: String, ext: String) =
+        login.server.trimEnd('/') + "/" + kind + "/" + Uri.encode(login.username) + "/" + Uri.encode(login.password) + "/" + id + "." + ext
+
+    suspend fun xtreamMovies(login: XtreamLogin): List<LiveChannel> {
+        val names = xtreamCategoryNames(login, "get_vod_categories")
+        val a = xtreamArray(login, "get_vod_streams")
+        return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { o ->
+            LiveChannel(o.optString("name").trim().ifEmpty { "Filem " + o.optString("stream_id") },
+                play(login, "movie", o.optString("stream_id"), o.optString("container_extension").ifBlank { "mp4" }),
+                o.optString("stream_icon").takeIf { it.startsWith("http") }, names[o.optString("category_id")]?.takeIf { it.isNotBlank() } ?: "Lain-lain")
+        }
+    }
+
+    suspend fun xtreamSeries(login: XtreamLogin): List<LiveChannel> {
+        val names = xtreamCategoryNames(login, "get_series_categories")
+        val a = xtreamArray(login, "get_series")
+        return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { o ->
+            LiveChannel(o.optString("name").trim().ifEmpty { "Siri " + o.optString("series_id") }, "xtream-series:" + o.optString("series_id"),
+                o.optString("cover").takeIf { it.startsWith("http") }, names[o.optString("category_id")]?.takeIf { it.isNotBlank() } ?: "Lain-lain")
+        }
+    }
+
+    /** The episodes of an Xtream series, in order ("S1 E2 · title"). */
+    suspend fun xtreamEpisodes(login: XtreamLogin, series: LiveChannel): List<LiveChannel> {
+        val id = series.url.removePrefix("xtream-series:")
+        val base = login.server.trimEnd('/') + "/player_api.php?username=" + Uri.encode(login.username) + "&password=" + Uri.encode(login.password)
+        val o = JSONObject(app.get("$base&action=get_series_info&series_id=" + Uri.encode(id), headers = mapOf("User-Agent" to PLAYER_AGENTS[1]!!), timeout = 60L).text)
+        val seasons = o.optJSONObject("episodes") ?: return emptyList()
+        val out = ArrayList<Pair<Int, LiveChannel>>()
+        for (season in seasons.keys()) {
+            val list = seasons.optJSONArray(season) ?: continue
+            for (i in 0 until list.length()) {
+                val e = list.optJSONObject(i) ?: continue
+                val sn = e.optString("season").toIntOrNull() ?: season.toIntOrNull() ?: 0
+                val en = e.optString("episode_num").toIntOrNull() ?: (i + 1)
+                val title = e.optString("title").trim()
+                val label = "S" + sn + " E" + en + if (title.isNotEmpty() && !title.contains(series.name, true)) " · $title" else ""
+                out += (sn * 10_000 + en) to LiveChannel(label, play(login, "series", e.optString("id"), e.optString("container_extension").ifBlank { "mp4" }),
+                    e.optJSONObject("info")?.optString("movie_image")?.takeIf { it.startsWith("http") } ?: series.logo, series.name)
+            }
+        }
+        return out.sortedBy { it.first }.map { it.second }
+    }
+
     fun vodCount(context: Context, sourceId: String) = prefs(context).getInt("vod_count_$sourceId", 0)
     fun setVodCount(context: Context, sourceId: String, n: Int) {
         if (vodCount(context, sourceId) != n) prefs(context).edit().putInt("vod_count_$sourceId", n).apply()

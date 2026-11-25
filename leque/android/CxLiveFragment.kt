@@ -65,8 +65,8 @@ import java.io.File
 /**
  * Channels of a list for the CloudStream player: CH+/CH- (and N/B) move to the next/previous one.
  */
-class CxLiveGenerator(private val channels: List<LiveChannel>, title: String) : VideoGenerator<ExtractorUri>(
-    channels.map { ExtractorUri(uri = Uri.parse(it.url), name = it.name, headerName = title, tvType = TvType.Live) }
+class CxLiveGenerator(private val channels: List<LiveChannel>, title: String, type: TvType = TvType.Live) : VideoGenerator<ExtractorUri>(
+    channels.map { ExtractorUri(uri = Uri.parse(it.url), name = it.name, headerName = title, tvType = type) }
 ) {
     override val hasCache = false
     override val canSkipLoading = false
@@ -148,6 +148,16 @@ class CxLiveFragment : Fragment() {
     private var allowOwn = false
     private var current = ""
     private var channels: List<LiveChannel> = emptyList()
+    // Films and series of the source ("Movie Lists" / "Series Lists" tiles among the categories).
+    private var vodMovies: List<LiveChannel> = emptyList()
+    private var vodSeries: List<LiveChannel> = emptyList()
+    private var vodXtream: CxLive.XtreamLogin? = null
+    /** null = live channels; "movie" / "series" = browsing films / series; [vodShow] = a series' episodes. */
+    private var vod: String? = null
+    private var vodShow: LiveChannel? = null
+    private var liveSaved: List<LiveChannel> = emptyList()
+    private var liveGroupSaved: String? = null
+    private var vodGroupSaved: String? = null
     private var groups: List<Pair<String, Int>> = emptyList()
     /** Live TV shows categories first (OTT Navigator style); null = the category list. */
     private var group: String? = null
@@ -167,7 +177,7 @@ class CxLiveFragment : Fragment() {
     private val pickFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { importFile(it) } }
 
     private val back = object : androidx.activity.OnBackPressedCallback(false) {
-        override fun handleOnBackPressed() { openCategories() }
+        override fun handleOnBackPressed() { goBack() }
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -365,6 +375,15 @@ class CxLiveFragment : Fragment() {
         val sameSource = id == current
         current = id
         if (!(keepGroup && sameSource)) group = null
+        // Back from the film player: the same films / series view, where the user was.
+        if (keepGroup && sameSource && vod != null && channels.isNotEmpty()) {
+            renderTabs(); loading(false)
+            val g = group
+            show(channels, null); group = g; render(); restoreScroll()
+            return
+        }
+        if (!(keepGroup && sameSource) || vod != null) { vod = null; vodShow = null; if (keepGroup && sameSource) group = null }
+        if (!sameSource) { vodMovies = emptyList(); vodSeries = emptyList(); vodXtream = null }
         renderTabs()
         loadJob?.cancel()
         favourites = CxLive.favouriteKeys(ctx, scope)
@@ -378,8 +397,15 @@ class CxLiveFragment : Fragment() {
                 loadJob = viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val list = withContext(Dispatchers.IO) { CxLive.channels(ctx, source, fresh) }
-                        // Films in the playlist go to the Films menu ("Playlist · <name>"), not here.
+                        // Films and series: under "Movie Lists" / "Series Lists" (and in the Films menu).
                         val films = if (radio) 0 else list.count { CxLive.isVod(it) }
+                        if (!radio && current == id) {
+                            val vodAll = list.filter { CxLive.isVod(it) }
+                            vodMovies = vodAll.filter { !CxLive.isSeries(it) }
+                            vodSeries = vodAll.filter { CxLive.isSeries(it) }
+                            vodXtream = if (source.kind == "xtream") CxLive.XtreamLogin(source.server.orEmpty(), source.username.orEmpty(), source.password.orEmpty())
+                                else source.url?.let { CxLive.xtreamFromLink(it) }
+                        }
                         if (!radio) {
                             val before = CxLive.vodCount(ctx, id)
                             CxLive.setVodCount(ctx, id, films)
@@ -387,7 +413,7 @@ class CxLiveFragment : Fragment() {
                         }
                         val live = if (films > 0) list.filter { !CxLive.isVod(it) } else list
                         if (current == id) {
-                            show(if (radio) live else CxEdits.apply(ctx, id, live), if (films > 0) "Senarai ini hanya ada filem: buka menu Filem → \"Playlist · " + source.name + "\"." else "Tiada saluran dalam senarai ini.")
+                            show(if (radio) live else CxEdits.apply(ctx, id, live), "Tiada saluran dalam senarai ini.")
                             restoreScroll(); loadGuide(source)
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {
@@ -449,9 +475,9 @@ class CxLiveFragment : Fragment() {
         }
         channelKeys = keys
         val isSource = current != FAV && current != RECENT
-        val orderedNames = if (isSource && !radio) CxEdits.sortCategories(requireContext(), current, names.values.toList()) else names.values.toList()
+        val orderedNames = if (isSource && !radio && vod == null) CxEdits.sortCategories(requireContext(), current, names.values.toList()) else names.values.toList()
         groups = orderedNames.map { name -> name to (counts[groupKey(name)] ?: 0) }
-        if (isSource && !radio) { CxLive.numbered = list; CxLive.categories = orderedNames }
+        if (isSource && !radio && vod == null) { CxLive.numbered = list; CxLive.categories = orderedNames }
         if (group != null && group != ALL && list.isNotEmpty() && groups.none { groupKey(it.first) == groupKey(group!!) }) group = null
         // Channels without a logo: look them up once (TV only; radio stations keep their own icons).
         if (!radio && !CxLogos.loaded && list.any { it.logo == null }) {
@@ -470,25 +496,29 @@ class CxLiveFragment : Fragment() {
      */
     private fun render(emptyText: String? = null) {
         val q = search.text?.toString()?.trim()?.lowercase().orEmpty()
-        val byCategory = !radio && current != FAV && current != RECENT && groups.size > 1
+        val byCategory = !radio && current != FAV && current != RECENT && (groups.size > 1 || (vod == null && vodTiles().isNotEmpty()))
         showingCategories = byCategory && group == null && q.isEmpty()
         val key = group?.takeIf { it != ALL }?.let { groupKey(it) }
         shown = if (showingCategories) emptyList() else channels.filterIndexed { i, it ->
             (key == null || q.isNotEmpty() || channelKeys.getOrNull(i)?.contains(key) == true) && (q.isEmpty() || it.name.lowercase().contains(q))
         }
-        back.isEnabled = byCategory && group != null
-        crumb.visibility = if (byCategory && group != null && q.isEmpty()) View.VISIBLE else View.GONE
+        back.isEnabled = (byCategory && group != null) || vod != null
+        crumb.visibility = if ((byCategory && group != null && q.isEmpty()) || vod != null) View.VISIBLE else View.GONE
         val last = if (radio || current == RECENT || q.isNotEmpty() || (byCategory && group != null)) null else context?.let { CxLive.recent(it, scope).firstOrNull() }
         resumeBar.text = last?.let { "▶  Sambung tonton: " + it.name } ?: ""
         resumeBar.visibility = if (last != null) View.VISIBLE else View.GONE
-        crumb.text = "‹  Kategori  ·  " + (if (group == ALL) "Semua" else group ?: "")
+        crumb.text = "‹  " + when {
+            vodShow != null -> vodShow!!.name
+            vod != null -> (if (vod == "series") "Series Lists" else "Movie Lists") + (group?.let { "  ·  " + (if (it == ALL) "Semua" else it) } ?: "")
+            else -> "Kategori  ·  " + (if (group == ALL) "Semua" else group ?: "")
+        }
         updateSpan(grid.width)
         grid.adapter?.notifyDataSetChanged()
         grid.scrollToPosition(0)
         val noun = if (radio) "stesen" else "saluran"
         status.text = when {
             channels.isEmpty() -> ""
-            showingCategories -> groups.size.toString() + " kategori · " + channels.size + " " + noun
+            showingCategories -> groups.size.toString() + " kategori · " + channels.size + " " + (if (vod == "movie") "filem" else if (vod == "series") "siri" else noun)
             else -> shown.size.toString() + " " + noun + (group?.takeIf { q.isEmpty() && it != ALL }?.let { " · $it" } ?: "")
         }
         val nothing = if (showingCategories) groups.isEmpty() else shown.isEmpty()
@@ -500,12 +530,91 @@ class CxLiveFragment : Fragment() {
     }
 
     private fun openCategory(name: String?) { group = name ?: ALL; render(); grid.requestFocus() }
+
+    /** "Movie Lists" / "Series Lists" tiles: shown when the source has films / series (Xtream: always). */
+    private fun vodTiles(): List<String> = if (radio || current == FAV || current == RECENT) emptyList() else listOfNotNull(
+        "movie".takeIf { vodMovies.isNotEmpty() || vodXtream != null },
+        "series".takeIf { vodSeries.isNotEmpty() || vodXtream != null })
+
+    /** Category tiles: "All" (when there are channels), the film / series tiles, then the categories. */
+    private fun catTiles(): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        if (channels.isNotEmpty()) out += "all" to "Semua"
+        if (vod == null) for (k in vodTiles()) out += k to (if (k == "movie") "Movie Lists" else "Series Lists")
+        groups.forEach { out += "group" to it.first }
+        return out
+    }
+
+    private fun openVod(kind: String) {
+        val ctx = context ?: return
+        liveSaved = channels; liveGroupSaved = group
+        vod = kind; vodShow = null; group = null
+        val ready = if (kind == "movie") vodMovies else vodSeries
+        val login = vodXtream
+        if (ready.isNotEmpty() || login == null) { show(ready, if (kind == "movie") "Tiada filem dalam sumber ini." else "Tiada siri dalam sumber ini."); return }
+        loading(true); status.text = "Memuatkan " + (if (kind == "movie") "filem" else "siri") + "…"
+        show(emptyList(), null)
+        val id = current
+        loadJob?.cancel()
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) { if (kind == "movie") CxLive.xtreamMovies(login) else CxLive.xtreamSeries(login) }
+                if (current == id && vod == kind) {
+                    if (kind == "movie") vodMovies = list else vodSeries = list
+                    show(list, if (kind == "movie") "Akaun ini tiada filem." else "Akaun ini tiada siri.")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) {
+                if (current == id && vod == kind) show(emptyList(), "Senarai tidak dapat dimuatkan (" + e.javaClass.simpleName + ").")
+            } finally { if (isAdded && this@CxLiveFragment.view != null) loading(false) }
+        }
+    }
+
+    private fun openSeries(show: LiveChannel) {
+        val login = vodXtream ?: return
+        vodGroupSaved = group
+        vodShow = show
+        loading(true); status.text = "Memuatkan episod…"
+        val id = current
+        loadJob?.cancel()
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val eps = withContext(Dispatchers.IO) { CxLive.xtreamEpisodes(login, show) }
+                if (current == id && vodShow == show) { show(eps, "Siri ini belum ada episod."); group = ALL; render() }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) {
+                if (current == id && vodShow == show) { vodShow = null; Toast.makeText(context, "Episod tidak dapat dimuatkan.", Toast.LENGTH_SHORT).show() }
+            } finally { if (isAdded && this@CxLiveFragment.view != null) loading(false) }
+        }
+    }
+
+    /** Back: episodes → series, a category → its list, films / series → the live categories. */
+    private fun goBack() {
+        when {
+            vodShow != null -> { vodShow = null; show(vodSeries, null); group = vodGroupSaved; render() }
+            group != null && (groups.size > 1 || (vod == null && vodTiles().isNotEmpty())) -> openCategories()
+            vod != null -> { vod = null; show(liveSaved, null); group = null; render() }
+            else -> openCategories()
+        }
+    }
     private fun openCategories() { group = null; render() }
 
     // ---------------- play ----------------
     private fun play(index: Int) {
         val c = shown.getOrNull(index) ?: return
+        if (vod != null) { playVod(c); return }
         playChannel(c, shown)
+    }
+
+    /** A film or an episode: the app's film player (seek, subtitles, next episode). */
+    private fun playVod(c: LiveChannel) {
+        if (c.url.startsWith("xtream-series:")) { openSeries(c); return }
+        val list = if (vodShow != null || vod == "series") shown else listOf(c)
+        val at = list.indexOf(c).coerceAtLeast(0)
+        restorePos = gridLayout.findFirstVisibleItemPosition()
+        CxRadio.stop()
+        activity.navigate(R.id.global_to_navigation_player, GeneratorPlayer.newInstance(
+            CxLiveGenerator(list, vodShow?.name ?: group?.takeIf { it != ALL } ?: c.name, if (vod == "series") TvType.TvSeries else TvType.Movie), at))
     }
 
     /** The last channel watched, inside its category (CH+/CH- move through it) when it is in this list. */
@@ -547,7 +656,7 @@ class CxLiveFragment : Fragment() {
     private class Holder(val tile: FrameLayout, val initials: TextView, val logo: ImageView, val name: TextView, val sub: TextView, val star: ImageView)
 
     private inner class GridAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-        override fun getItemCount() = if (showingCategories) groups.size + 1 else shown.size
+        override fun getItemCount() = if (showingCategories) catTiles().size else shown.size
         override fun getItemViewType(position: Int) = if (showingCategories) 1 else 0
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val ctx = parent.context
@@ -574,19 +683,27 @@ class CxLiveFragment : Fragment() {
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             val h = holder.itemView.tag as Holder
             if (showingCategories) {
-                val (name, count) = if (position == 0) "Semua" to channels.size else groups[position - 1]
+                val (kind, name) = catTiles().getOrNull(position) ?: return
+                val noun = when { radio -> " stesen"; vod == "movie" -> " filem"; vod == "series" -> " siri"; else -> " saluran" }
                 h.name.text = name
-                h.sub.text = count.toString() + if (radio) " stesen" else " saluran"
+                h.sub.text = when (kind) {
+                    "all" -> channels.size.toString() + noun
+                    "movie" -> if (vodMovies.isNotEmpty()) vodMovies.size.toString() + " filem" else "Filem"
+                    "series" -> if (vodSeries.isNotEmpty()) vodSeries.size.toString() + " siri" else "Siri"
+                    else -> (groups.firstOrNull { it.first == name }?.second ?: 0).toString() + noun
+                }
                 h.star.visibility = View.GONE
                 // A category has no logo of its own: an icon for its kind (sports, movies, news...).
                 h.initials.visibility = View.INVISIBLE
-                h.logo.setImageResource(if (position == 0) R.drawable.cx_cat_all else categoryIcon(name))
+                h.logo.setImageResource(when (kind) { "all" -> R.drawable.cx_cat_all; "movie" -> R.drawable.cx_movie; "series" -> R.drawable.cx_cat_player; else -> categoryIcon(name) })
                 h.logo.imageTintList = ColorStateList.valueOf(accent)
                 h.logo.setPadding(dp(22), dp(22), dp(22), dp(22))
-                holder.itemView.setOnClickListener { openCategory(if (position == 0) null else name) }
+                holder.itemView.setOnClickListener {
+                    when (kind) { "all" -> openCategory(null); "movie", "series" -> openVod(kind); else -> openCategory(name) }
+                }
                 holder.itemView.setOnLongClickListener {
                     val ctx = context
-                    if (position == 0 || ctx == null || current == FAV || current == RECENT || radio) return@setOnLongClickListener false
+                    if (kind != "group" || vod != null || ctx == null || current == FAV || current == RECENT || radio) return@setOnLongClickListener false
                     val t = { ms: String, en: String -> CxLiveManage.t(ctx, ms, en) }
                     AlertDialog.Builder(ctx).setTitle(name).setItems(arrayOf(t("Tukar nama", "Rename"), t("Sembunyikan kategori", "Hide category"))) { _, which ->
                         if (which == 0) CxLiveManage.renameCategory(ctx, current, name) { refreshArrangement() }
